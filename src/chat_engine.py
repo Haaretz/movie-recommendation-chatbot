@@ -18,19 +18,17 @@ def reset_chat_and_timestamp():
     return new_timestamp
 
 
-def process_message(message, chat_history, session_timestamp, start_date, end_date):
+def process_message(message, chat_history, session_timestamp):
     if message is None or message == "":
         return
-    if start_date is None or end_date is None:
-        start_date = None
-        end_date = None
+
 
     formatted_history = []
     if chat_history:
         formatted_history = chat_history
 
     try:
-        response_generator = llm_api_client.send_message(message, start_date, end_date).text
+        response_generator = llm_api_client.send_message(message).text
 
         partial_response = ""
         for chunk in response_generator:
@@ -84,8 +82,6 @@ if __name__ == "__main__":
         session_timestamp_state = gr.State(initial_session_timestamp)
         feedback_modal_state = gr.State(False)
         custom_date_visibility_state = gr.State(False)
-        start_date_state = gr.State(None)
-        end_date_state = gr.State(None)
         gr.Markdown(
             """<h1><center>🎩 הברון בוחן העובדות</center></h1>
         <center>המלצות סרטים וסדרות הארץ</center>
@@ -101,15 +97,10 @@ if __name__ == "__main__":
 
         examples = gr.Examples(
             examples=[
-                "תסכם לי את התיקים השונים במשפט נתניהו",
-                "איזה דיסקים חדשים בן שלו המליץ עליהם השבוע?",
-                "תכתוב פסקה על חברת פאראגון",
-                "תכתוב שאלות ותשובות על חוק הרבנים",
-                "תחזיר המלצות לסרטים שיש סיכוי שיזכו באוסקר",
-                """לפי כתבה של יהושע (ג'וש) בריינר, על מה חנמאל דורפמן נחקר במח"ש?""",
-                "מהו פער דיגטלי",
-                "תסכם את חדשות האקולוגיה מהשבוע האחרון",
-                "האם היו דיווחים על רציחות בחברה הערבית השבוע?",
+                "סרטי ילדים מצוירים",
+                "סדרת קומדיה קלילה",
+                "תוכניות זוכות אמי",
+                "סרטי עם ג'ניפר אניסטון",
             ],
             inputs=msg,
         )
@@ -136,12 +127,12 @@ if __name__ == "__main__":
             history = history + [{"role": "user", "content": user_message}]
             return history, history
 
-        def bot_response(history, session_timestamp, start_date, end_date):
+        def bot_response(history, session_timestamp):
             try:
                 user_message = history[-1]["content"]
                 full_history = history
                 for response in process_message(
-                    user_message, full_history[:-1], session_timestamp, start_date, end_date
+                    user_message, full_history[:-1], session_timestamp
                 ):
                     yield response
             except Exception as e:
@@ -153,12 +144,12 @@ if __name__ == "__main__":
 
         msg.submit(add_user_message, [msg, current_chat_history], [chatbot, current_chat_history]).then(
             bot_response,
-            [current_chat_history, session_timestamp_state, start_date_state, end_date_state],
+            [current_chat_history, session_timestamp_state],
             [chatbot, msg, current_chat_history],
         )
         send_btn.click(add_user_message, [msg, current_chat_history], [chatbot, current_chat_history]).then(
             bot_response,
-            [current_chat_history, session_timestamp_state, start_date_state, end_date_state],
+            [current_chat_history, session_timestamp_state],
             [chatbot, msg, current_chat_history],
         )
 

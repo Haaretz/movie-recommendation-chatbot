@@ -19,7 +19,6 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         self.config = config
         self.MIN_SCORE_THRESHOLD = config["qdrant"]["MIN_SCORE_THRESHOLD"]
         self.SEARCH_LIMIT = config["qdrant"]["SEARCH_LIMIT"]
-        self.SCROLL_LIMIT = config["qdrant"]["SCROLL_LIMIT"]
 
         QdrantClientManager.__init__(self, config["qdrant"]["qdrant_url"])
         Embedding.__init__(
@@ -89,18 +88,7 @@ if __name__ == "__main__":
     config = load_config("config/config.yaml")
 
     SA = SearchArticle(config)
-    # result = SA.retrieve_documents_by_payload(
-    #     url = ['00000194-273e-da14-adb7-777e7ed20000'],
-    #     brand = None,
-    #     writer_name =None,
-    #     publish_time_start = None,
-    #     publish_time_end = None,
-    #     primary_section = None,
-    #     secondary_section = None,
-    #     tags = None,
-    #     article_type = None,
-    # )
-    # print(result)
+  
 
     result = SA.retrieve_relevant_documents(query="הכיבוש")
     print(result)

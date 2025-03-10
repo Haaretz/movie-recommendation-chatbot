@@ -1,47 +1,4 @@
 
-sql:
-  brand :
-  - HTZ
-  - TM
-
-  status :
-  - Published
-
-  exluded_sections :
-  - משחקים
-  - TheMarker Labels
-  - הארץ Labels
-  - מדיה ושיווק
-  - פודקאסטים
-  - טוקבקים
-  - סמדר בהארץ
-  - סמדר במרקר
-  - הסוכנים
-
-  exluded_section_secondary :
-    - פודקאסטים
-    - מזג האוויר
-    - תשבצי מוסף הארץ
-
-
-metadata :
-  - article_name
-  - article_type
-  - brand
-  - article_id
-  - publish_time
-  - writer_name
-  - tag_names
-  - section_primary
-  - section_secondary
-  - word_count
-  - paywall_status
-  - tldr
-
-
-exluded_sections_for_chuncking :
-  - אוכל
-  - טיולים
 
 return_fields:
   article_name: שם המאמר
@@ -53,19 +10,16 @@ return_fields:
 
 
 
-VERTEXAI_PROJECT : htz-data
-VERTEXAI_LOCATION : me-west1-a
 bucket_name : ask-haaretz
 embedding:
   embedding_model_name : text-multilingual-embedding-002
   embedding_dimensionality : 768
 qdrant:
+  MIN_SCORE_THRESHOLD: 0.7
+  SEARCH_LIMIT: 8
   qdrant_url: "from env"
   qdrant_collection_name: ask_haaretz
   embedding_metric: cosine
-  MIN_SCORE_THRESHOLD: 0.6
-  SEARCH_LIMIT: 10
-  SCROLL_LIMIT: 20
 
 llm:
   GOOGLE_API_KEY: "from env"

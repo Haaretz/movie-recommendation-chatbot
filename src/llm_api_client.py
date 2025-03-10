@@ -50,7 +50,7 @@ class LLMClient:
             logger.info(f"Error initializing genai client: {e}")
             raise  # Re-raise the exception to be handled in the caller (init)
 
-    def _filter_fileds(self, response, start_date, end_date):
+    def _filter_fileds(self, response):
         """
         Filter the fields from the response.
         """
@@ -60,21 +60,15 @@ class LLMClient:
 
         names = [fc.name for fc in response.function_calls]
         logger.info(f"Received function calls: {names}")
-        if "get_articles" in names:
-            query = [r.args["query"] for r in response.function_calls if r.name == "get_articles"][0]
+        if "recommendations_for_tv_and_movies" in names:
+            query = [r.args["query"] for r in response.function_calls if r.name == "recommendations_for_tv_and_movies"][0]
             _return = self.search_article.retrieve_relevant_documents(
                 query,
             )
-            if (
-                publish_time_end is not None
-                and publish_time_start is not None
-                and publish_time_start > publish_time_end
-            ):
-                publish_time_start, publish_time_end = publish_time_end, publish_time_start
 
             parts.append(
                 Part.from_function_response(
-                    name="get_articles",
+                    name="recommendations_for_tv_and_movies",
                     response={
                         "content": _return,
                     },
@@ -82,12 +76,12 @@ class LLMClient:
             )
 
         logger.info(
-            f"Received response from LLM: query='{query}', brand='{brand}', writer_name='{writer_name}', publish_time_start='{publish_time_start}', publish_time_end='{publish_time_end}', primary_section='{primary_section}', secondary_section='{secondary_section}', tags='{tags}', article_type='{article_type}, url='{url}'"
-        )
+            f"Received response from LLM: query='{query}'")
+        
 
         return parts
 
-    def send_message(self, message: str, start_date, end_date) -> str:
+    def send_message(self, message: str) -> str:
         """
         Sends a message within the chat session and returns the response text.
 
@@ -119,7 +113,7 @@ class LLMClient:
                 return "שגיאה. נסה שוב"
             return response
 
-        parts = self._filter_fileds(response, start_date, end_date)
+        parts = self._filter_fileds(response)
 
         logger.info(f"Sending message with parts: {[p.function_response.name for p in parts]}")
         if len(parts) != len(response.function_calls):
@@ -144,7 +138,6 @@ class LLMClient:
 if __name__ == "__main__":
     import datetime
 
-    from utility.replace_placeholder import replace_placeholder
 
     from config.load_config import load_config
 
@@ -157,7 +150,6 @@ if __name__ == "__main__":
 
     sys_instruct = prompts["system_instructions"]
 
-    sys_instruct = replace_placeholder(sys_instruct, "{currentDateTime}", datetime.datetime.now().strftime("%Y-%m-%d"))
 
     try:
         config = load_config("config/config.yaml")
