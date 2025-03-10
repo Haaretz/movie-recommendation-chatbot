@@ -1,4 +1,3 @@
-import pandas as pd
 from google import genai
 from google.genai.types import Tool
 
@@ -6,7 +5,7 @@ from google.genai.types import Tool
 get_articles = {
     "name": "recommendations_for_tv_and_movies",
     "description": """
-    Use this function when the user is asking for recommendations for TV and movie shows.
+    Use this function when the user is asking about TV and movie shows.
     """,
     "parameters": {
         "type": "object",

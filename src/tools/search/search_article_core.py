@@ -90,5 +90,5 @@ if __name__ == "__main__":
     SA = SearchArticle(config)
   
 
-    result = SA.retrieve_relevant_documents(query="הכיבוש")
+    result = SA.retrieve_relevant_documents(query="Oscar nominees")
     print(result)
