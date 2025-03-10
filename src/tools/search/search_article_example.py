@@ -1,5 +1,5 @@
 from config.load_config import load_config
-from src.chat.tools.search.search_article_core import SearchArticle
+from src.tools.search.search_article_core import SearchArticle
 
 if __name__ == "__main__":
     query_text = "שלמה ארצי"

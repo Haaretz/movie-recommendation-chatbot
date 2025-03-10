@@ -6,12 +6,11 @@ from logger import logger
 from src.tools.search.search_article_filters import SearchArticleFilters
 from src.tools.search.search_article_results import SearchArticleResults
 from src.tools.search.utillity.embedding import Embedding
-from tools.search.utillity.qdrant import QdrantClientManager
+from src.tools.search.utillity.qdrant import QdrantClientManager
 
 
 class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, SearchArticleResults):
 
-    SEARCH_LIMIT = 15
     HNSW_EF = 128
     SCROLL_LIMIT = 10
 
@@ -34,84 +33,9 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         self.qdrant_collection_name = config["qdrant"].get("qdrant_collection_name")
         self.translation_mapping = config["return_fields"]
 
-    def retrieve_documents_by_payload(
-        self,
-        brand: str,
-        writer_name: str,
-        publish_time_start: str,
-        publish_time_end: str,
-        primary_section: str,
-        secondary_section: str,
-        tags: str,
-        article_type: str,
-        url: List[str],
-    ) -> str:
-        """
-        Retrieve documents from Qdrant based on payload filters only (no vector search).
-
-        Utilizes the scroll API for efficient payload-based filtering.
-
-        Args:
-            brand: Newspaper brand to filter by.
-            writer_name: Writer name to filter by.
-            publish_time_start: Start date for publish time range filter.
-            publish_time_end: End date for publish time range filter.
-            primary_section: Primary section to filter by.
-            secondary_section: Secondary section to filter by.
-            tags: Tags to filter by.
-            article_type: Article type to filter by.
-
-        Returns:
-            Formatted string of documents matching the payload filters. Returns NO_RESULT if no documents found.
-        """
-        logger.info(
-            f"Retrieving documents by payload filter: brand='{brand}', writer_name='{writer_name}', publish_time_start='{publish_time_start}', publish_time_end='{publish_time_end}', primary_section='{primary_section}', secondary_section='{secondary_section}', tags='{tags}', article_type='{article_type}'"
-        )
-
-        qdrant_filter = self._create_qdrant_filter(
-            brand,
-            writer_name,
-            publish_time_start,
-            publish_time_end,
-            primary_section,
-            secondary_section,
-            tags,
-            article_type,
-            url,
-        )
-
-        all_points = []
-        next_page_offset = None
-        while True:
-            scroll_batch, next_page_offset = self.client_qdrant.scroll(
-                collection_name=self.qdrant_collection_name,
-                scroll_filter=qdrant_filter,
-                limit=self.SCROLL_LIMIT,
-                offset=next_page_offset,
-            )
-            if not scroll_batch:
-                break
-            all_points.extend(scroll_batch)
-            if next_page_offset is None:
-                break
-
-        documents = self._extract_and_translate_payload_from_points(all_points)
-
-        # logger.info(f"Payload-filtered documents:\n{documents}")
-
-        return documents
-
     def retrieve_relevant_documents(
         self,
         query: str,
-        brand: str,
-        writer_name: str,
-        publish_time_start: str,
-        publish_time_end: str,
-        primary_section: str,
-        secondary_section: str,
-        tags: str,
-        article_type: str,
     ) -> str:
         """
         Retrieve relevant documents from Qdrant using vector search and payload filters.
@@ -133,22 +57,10 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
             Formatted string of relevant documents. Returns NO_RESULT if no relevant documents found.
         """
         logger.info(
-            f"Retrieving relevant documents for query: '{query}', brand='{brand}', writer_name='{writer_name}', publish_time_start='{publish_time_start}',ֿ\
-             publish_time_end='{publish_time_end}' primary_section='{primary_section}', secondary_section='{secondary_section}', tags='{tags}', article_type='{article_type}'"
-        )
+            f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter(
-            brand,
-            writer_name,
-            publish_time_start,
-            publish_time_end,
-            primary_section,
-            secondary_section,
-            tags,
-            article_type,
-            url=[],
-        )
+        qdrant_filter = self._create_qdrant_filter()
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
@@ -190,16 +102,5 @@ if __name__ == "__main__":
     # )
     # print(result)
 
-    result = SA.retrieve_relevant_documents(
-        query="הכיבוש",
-        brand=None,
-        writer_name=None,
-        publish_time_start=None,
-        publish_time_end=None,
-        primary_section=None,
-        secondary_section=["מאמר מערכת"],
-        # secondary_section=None,
-        tags=None,
-        article_type=None,
-    )
+    result = SA.retrieve_relevant_documents(query="הכיבוש")
     print(result)

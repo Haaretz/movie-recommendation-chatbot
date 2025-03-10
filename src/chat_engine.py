@@ -2,17 +2,6 @@ import gradio as gr
 
 from config.load_config import load_config
 from logger import logger
-from src.chat_engine_utillity.date_utility import (
-    reset_date_filters,
-    set_half_year_dates,
-    set_month_dates,
-    set_today_dates,
-    set_two_week_dates,
-    set_week_dates,
-    toggle_custom_date_visibility,
-    update_end_date,
-    update_start_date,
-)
 from src.chat_engine_utillity.save_chat import (
     get_new_session_timestamp,
     save_chat_history,
@@ -99,21 +88,9 @@ if __name__ == "__main__":
         end_date_state = gr.State(None)
         gr.Markdown(
             """<h1><center>🎩 הברון בוחן העובדות</center></h1>
-        <center>צ'אטבוט הבודק עובדות ומספק תשובות אינפורמטיביות</center>
+        <center>המלצות סרטים וסדרות הארץ</center>
         """
         )
-        with gr.Row():
-            half_year_button = gr.Button("חצי שנה")
-            month_button = gr.Button("החודש")
-            two_weeks_button = gr.Button("שבועיים")
-            week_button = gr.Button("השבוע")
-            today_button = gr.Button("היום")
-            custom_date_button = gr.Button("תאריך מותאם אישית")
-            no_filter_button = gr.Button("ללא סינון")
-        with gr.Row(visible=False) as custom_date_column:
-            datetime_picker_start = gr.DateTime(type="datetime", label="תאריך התחלה", include_time=False)
-            datetime_picker_end = gr.DateTime(type="datetime", label="תאריך סיום", include_time=False)
-
         chatbot = gr.Chatbot(height=500, rtl=True, type="messages")
         msg = gr.Textbox(placeholder="הקלד הודעה לברון כאן", label="הודעה לברון", rtl=True)
         clear_button = gr.ClearButton([msg, chatbot, current_chat_history])
@@ -187,38 +164,6 @@ if __name__ == "__main__":
 
         clear_button.click(reset_chat_and_timestamp, outputs=[session_timestamp_state])
 
-        custom_date_button.click(
-            toggle_custom_date_visibility,
-            inputs=[custom_date_visibility_state],
-            outputs=[custom_date_column, custom_date_visibility_state],
-        )
-
-        datetime_picker_start.change(update_start_date, inputs=datetime_picker_start, outputs=start_date_state)
-        datetime_picker_end.change(update_end_date, inputs=datetime_picker_end, outputs=end_date_state)
-
-        today_button.click(
-            set_today_dates, outputs=[start_date_state, end_date_state, datetime_picker_start, datetime_picker_end]
-        )
-
-        week_button.click(
-            set_week_dates, outputs=[start_date_state, end_date_state, datetime_picker_start, datetime_picker_end]
-        )
-
-        two_weeks_button.click(
-            set_two_week_dates, outputs=[start_date_state, end_date_state, datetime_picker_start, datetime_picker_end]
-        )
-
-        month_button.click(
-            set_month_dates, outputs=[start_date_state, end_date_state, datetime_picker_start, datetime_picker_end]
-        )
-
-        half_year_button.click(
-            set_half_year_dates, outputs=[start_date_state, end_date_state, datetime_picker_start, datetime_picker_end]
-        )
-
-        no_filter_button.click(
-            reset_date_filters, outputs=[start_date_state, end_date_state, datetime_picker_start, datetime_picker_end]
-        )
 
     try:
         iface = demo.launch(

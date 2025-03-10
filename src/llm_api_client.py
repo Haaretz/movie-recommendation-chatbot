@@ -54,182 +54,16 @@ class LLMClient:
         """
         Filter the fields from the response.
         """
-        brand = None
-        writer_name = None
-        publish_time_start = None
-        publish_time_end = None
         query = None
-        primary_section = None
-        secondary_section = None
-        tags = None
-        url = []
-        article_type = []
         parts = []
+        
 
         names = [fc.name for fc in response.function_calls]
         logger.info(f"Received function calls: {names}")
-        if "filter_brand" in names:
-            brand = [r.args["brand"] for r in response.function_calls if r.name == "filter_brand"][0]
-            parts.append(
-                Part.from_function_response(
-                    name="filter_brand",
-                    response={
-                        "brand": brand,
-                    },
-                )
-            )
-        if "filter_writer_name" in names:
-            writer_name = [r.args["writer_name"] for r in response.function_calls if r.name == "filter_writer_name"][0]
-            parts.append(
-                Part.from_function_response(
-                    name="filter_writer_name",
-                    response={
-                        "writer_name": writer_name,
-                    },
-                )
-            )
-        # if "filter_articles_by_time_range" in names:
-        #     publish_time_start = [
-        #         r.args["publish_time_start"]
-        #         for r in response.function_calls
-        #         if r.name == "filter_articles_by_time_range"
-        #     ][0]
-        #     publish_time_end = [
-        #         r.args["publish_time_end"] for r in response.function_calls if r.name == "filter_articles_by_time_range"
-        #     ][0]
-        #     parts.append(
-        #         Part.from_function_response(
-        #             name="filter_articles_by_time_range",
-        #             response={
-        #                 "publish_time_start": publish_time_start,
-        #                 "publish_time_end": publish_time_end,
-        #             },
-        #         )
-        #     )
-        # if "filter_articles_last_day" in names:
-        #     publish_time_start = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        #     publish_time_end = datetime.datetime.now().strftime("%Y-%m-%d")
-        #     parts.append(
-        #         Part.from_function_response(
-        #             name="filter_articles_last_day",
-        #             response={
-        #                 "publish_time_start": (datetime.datetime.now() - datetime.timedelta(days=1)).strftime(
-        #                     "%Y-%m-%d"
-        #                 ),
-        #                 "publish_time_end": datetime.datetime.now().strftime("%Y-%m-%d"),
-        #             },
-        #         )
-        #     )
-        # if "filter_articles_last_week" in names:
-        #     publish_time_start = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
-        #     publish_time_end = datetime.datetime.now().strftime("%Y-%m-%d")
-        #     parts.append(
-        #         Part.from_function_response(
-        #             name="filter_articles_last_week",
-        #             response={
-        #                 "publish_time_start": (datetime.datetime.now() - datetime.timedelta(days=7)).strftime(
-        #                     "%Y-%m-%d"
-        #                 ),
-        #                 "publish_time_end": datetime.datetime.now().strftime("%Y-%m-%d"),
-        #             },
-        #         )
-        #     )
-        # if "filter_articles_last_month" in names:
-        #     publish_time_start = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime("%Y-%m-%d")
-        #     publish_time_end = datetime.datetime.now().strftime("%Y-%m-%d")
-        #     parts.append(
-        #         Part.from_function_response(
-        #             name="filter_articles_last_month",
-        #             response={
-        #                 "publish_time_start": (datetime.datetime.now() - datetime.timedelta(days=30)).strftime(
-        #                     "%Y-%m-%d"
-        #                 ),
-        #                 "publish_time_end": datetime.datetime.now().strftime("%Y-%m-%d"),
-        #             },
-        #         )
-        #     )
-        if "filter_primary_section" in names:
-            primary_section = [
-                r.args["primary_section"] for r in response.function_calls if r.name == "filter_primary_section"
-            ][0]
-            parts.append(
-                Part.from_function_response(
-                    name="filter_primary_section",
-                    response={
-                        "primary_section": primary_section,
-                    },
-                )
-            )
-        if "filter_secondary_section" in names:
-            secondary_section = [
-                r.args["secondary_section"] for r in response.function_calls if r.name == "filter_secondary_section"
-            ][0]
-            parts.append(
-                Part.from_function_response(
-                    name="filter_secondary_section",
-                    response={
-                        "secondary_section": secondary_section,
-                    },
-                )
-            )
-        if "filter_tags" in names:
-            tags = [r.args["tags"] for r in response.function_calls if r.name == "filter_tags"][0]
-            parts.append(
-                Part.from_function_response(
-                    name="filter_tags",
-                    response={
-                        "tags": tags,
-                    },
-                )
-            )
-        if "filter_article_type" in names:
-            article_type = [r.args["article_type"] for r in response.function_calls if r.name == "filter_article_type"][
-                0
-            ]
-            article_type = ARTICLE_TYPE_TRANSLATION.get(article_type)
-            parts.append(
-                Part.from_function_response(
-                    name="filter_article_type",
-                    response={
-                        "article_type": article_type,
-                    },
-                )
-            )
-
-        if "analyze_article_content" in names:
-            url = [r.args["url"] for r in response.function_calls if r.name == "analyze_article_content"][0]
-
-            _return = self.search_article.retrieve_documents_by_payload(
-                brand,
-                writer_name,
-                publish_time_start,
-                publish_time_end,
-                primary_section,
-                secondary_section,
-                tags,
-                article_type,
-                url,
-            )
-            parts.append(
-                Part.from_function_response(
-                    name="get_articles",
-                    response={
-                        "content": _return,
-                    },
-                ),
-            )
         if "get_articles" in names:
             query = [r.args["query"] for r in response.function_calls if r.name == "get_articles"][0]
             _return = self.search_article.retrieve_relevant_documents(
                 query,
-                brand,
-                writer_name,
-                start_date,
-                end_date,
-                primary_section,
-                secondary_section,
-                tags,
-                article_type,
             )
             if (
                 publish_time_end is not None
@@ -237,28 +71,6 @@ class LLMClient:
                 and publish_time_start > publish_time_end
             ):
                 publish_time_start, publish_time_end = publish_time_end, publish_time_start
-
-            logger.debug(
-                f"find: {len(_return)} articles for query: {query}, brand: {brand}, writer_name: {writer_name}, publish_time_start: {publish_time_start}, publish_time_end: {publish_time_end}, primary_section: {primary_section}, secondary_section: {secondary_section}, tags: {tags}, article_type: {article_type}"
-            )
-            if len(_return) == 0:
-                _return = NO_RESULT
-                if query:
-                    _return += f" עבור השאילתה '{query}'"
-                if publish_time_start:
-                    _return += f" בטווח הזמן {publish_time_start} עד {publish_time_end}"
-                if brand:
-                    _return += f" במותג {brand}"
-                if writer_name:
-                    _return += f" על ידי {' '.join(writer_name)}"
-                if primary_section:
-                    _return += f" בקטגוריה {', '.join(primary_section)}"
-                if secondary_section:
-                    _return += f" בתת קטגוריה {', '.join(secondary_section)}"
-                if tags:
-                    _return += f" עם התגים {' '.join(tags)}"
-                if article_type:
-                    _return += f" בסוג המאמר {article_type}"
 
             parts.append(
                 Part.from_function_response(
