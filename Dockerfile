@@ -17,4 +17,4 @@ ENV PYTHONPATH=/app
 EXPOSE 8000
 
 # Run the chat_engine application
-CMD ["python", "src/chat/chat_engine.py"]
+CMD ["python", "src/chat_engine.py"]
