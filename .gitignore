@@ -1,0 +1,11 @@
+.vscode/
+__pycache__/
+.ruff_cache/
+.DS_Store/
+.DS_Store
+.venv/
+local_data/
+.devcontainer/
+.env
+venv
+.devcontainer/
