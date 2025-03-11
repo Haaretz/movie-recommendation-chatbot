@@ -87,7 +87,7 @@ if __name__ == "__main__":
         <center>המלצות סרטים וסדרות הארץ</center>
         """
         )
-        chatbot = gr.Chatbot(height=500, rtl=True, type="messages")
+        chatbot = gr.Chatbot(height=500, rtl=False, type="messages")
         msg = gr.Textbox(placeholder="הקלד הודעה לברון כאן", label="הודעה לברון", rtl=True)
         clear_button = gr.ClearButton([msg, chatbot, current_chat_history])
 
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         )
 
         with gr.Column(visible=False) as feedback_modal:
-            feedback_text_input = gr.Textbox(lines=5, placeholder="הזן את המשוב שלך כאן", label="משוב", rtl=False)
+            feedback_text_input = gr.Textbox(lines=5, placeholder="הזן את המשוב שלך כאן", label="משוב", rtl=True)
             user_name_input = gr.Textbox(placeholder="השם שלך (אופציונלי)", label="שם", rtl=True)
             submit_feedback_btn = gr.Button("שלח משוב")
             cancel_feedback_btn = gr.Button("ביטול")
