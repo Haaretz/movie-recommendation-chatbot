@@ -83,7 +83,7 @@ if __name__ == "__main__":
         feedback_modal_state = gr.State(False)
         custom_date_visibility_state = gr.State(False)
         gr.Markdown(
-            """<h1><center>🎩 הברון בוחן העובדות</center></h1>
+            """<h1><center>סרטומניה</center></h1>
         <center>המלצות סרטים וסדרות הארץ</center>
         """
         )
