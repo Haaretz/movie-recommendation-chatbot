@@ -36,8 +36,8 @@ class LLMClient:
         Initializes the Google Generative AI client.
         """
         try:
-            client = genai.Client(vertexai=False, api_key=api_key)
-            chat = client.chats.create(
+            self.client = genai.Client(vertexai=False, api_key=api_key)
+            chat = self.client.chats.create(
                 model=model_name,
                 config=types.GenerateContentConfig(
                     system_instruction=sys_instruct,
@@ -49,6 +49,24 @@ class LLMClient:
         except Exception as e:
             logger.info(f"Error initializing genai client: {e}")
             raise  # Re-raise the exception to be handled in the caller (init)
+
+    def _translate_english_query(self, query: str):
+        is_hebrew = any('\u0590' <= char <= '\u05FF' or '\uFB1D' <= char <= '\uFB4F' for char in query)
+        if is_hebrew:
+            logger.debug("Query is likely Hebrew, returning original query.")
+            return query
+
+        translation_prompt = f"Translate the following English query to Hebrew: '{query}'. Return only the translation."
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=translation_prompt,
+        )
+        translated_query = response.text.strip()
+        logger.debug(f"Translated query to Hebrew: '{translated_query}'")
+        return translated_query
+
+
+        
 
     def _filter_fileds(self, response):
         """
@@ -62,10 +80,12 @@ class LLMClient:
         logger.info(f"Received function calls: {names}")
         if "recommendations_for_tv_and_movies" in names:
             query = [r.args["query"] for r in response.function_calls if r.name == "recommendations_for_tv_and_movies"][0]
+            query = self._translate_english_query(query)
+
             _return = self.search_article.retrieve_relevant_documents(
                 query,
             )
-
+            
             parts.append(
                 Part.from_function_response(
                     name="recommendations_for_tv_and_movies",
@@ -104,13 +124,13 @@ class LLMClient:
         if response.candidates[0].finish_message:
             logger.info("Resetting chat session.")
             self.chat_session = self._initialize_client(self.sys_instruct, self.api_key, self.model_name)
-            return "שגיאה. מאפס צאט"
+            return "Error: " + response.candidates[0].finish_message
 
         if not response.function_calls:
-            if response.text is None:
-                logger.exception("Error in response from LLM.")
-                logger.info(f"Message that caused error: {message}")
-                return "שגיאה. נסה שוב"
+            # if response.text is None:
+            #     logger.exception("Error in response from LLM.")
+            #     logger.info(f"Message that caused error: {message}")
+            #     return "שגיאה. נסה שוב"
             return response
 
         parts = self._filter_fileds(response)
@@ -119,7 +139,7 @@ class LLMClient:
         if len(parts) != len(response.function_calls):
             logger.info(f"Error in parts: {parts}")
             logger.info(f"Error in response: {response.function_calls}")
-            return "שגיאה. נסה שוב"
+            return "num function calls and parts do not match"
         try:
             response = self.chat_session.send_message(parts)
         except Exception as e:

@@ -47,7 +47,8 @@ class SearchArticleFilters:
             models.FieldCondition(key="section_secondary", match=models.MatchAny(any=['television', 'טלוויזיה', 'קולנוע', 'cinema']))
         ])
         or_conditions.append(condition_a_filters)
-
+        
+        # 2.3. Condition C:
         condition_c_filters = models.Filter(must=[models.FieldCondition(key="writer_name", match=models.MatchAny(any=['חן חדד']))])
         or_conditions.append(condition_c_filters)
 
