@@ -106,7 +106,7 @@ if __name__ == "__main__":
         )
 
         with gr.Column(visible=False) as feedback_modal:
-            feedback_text_input = gr.Textbox(lines=5, placeholder="הזן את המשוב שלך כאן", label="משוב", rtl=True)
+            feedback_text_input = gr.Textbox(lines=5, placeholder="הזן את המשוב שלך כאן", label="משוב", rtl=False)
             user_name_input = gr.Textbox(placeholder="השם שלך (אופציונלי)", label="שם", rtl=True)
             submit_feedback_btn = gr.Button("שלח משוב")
             cancel_feedback_btn = gr.Button("ביטול")
