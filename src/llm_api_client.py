@@ -1,205 +1,120 @@
-import datetime
+import streamlit as st
+from anthropic import Anthropic
 
-from google import genai
-from google.genai import types
-from google.genai.types import Part
-
-from constant import ARTICLE_TYPE_TRANSLATION, NO_RESULT
-from logger import logger
-from src.tools.import_tools import qdrant_tools
+from config.config import IDENTITY, MODEL, TOOLS
 from src.tools.search.search_article_core import SearchArticle
+from logger import logger
 
 
-class LLMClient:
-    def __init__(self, model_name: str, api_key: str, sys_instruct: str, config):
-        """
-        Initialize the LLMApiClient using the chat conversation API.
-
-        Args:
-            model_name (str): The name of the language model to use (e.g., "gemini-pro", "gemini-2.0-flash").
-            api_key (str): The API key for accessing the LLM service.
-            sys_instruct (str, optional): System instructions (not directly used in this chat API example). Defaults to None.
-        """
+class ChatBot:
+    def __init__(self, session_state, config):
+        self.anthropic = Anthropic()
+        self.session_state = session_state
         self.search_article = SearchArticle(config)
-        self.sys_instruct = sys_instruct
-        self.api_key = api_key
-        self.model_name = model_name
-        try:
-            self.chat_session = self._initialize_client(self.sys_instruct, self.api_key, self.model_name)
-            logger.info(f"LLMClient initialized for model: {model_name}")
-        except Exception as e:
-            logger.info(f"Error initializing LLMClient: {e}")
-            self.chat_session = None  # Handle initialization failure
 
-    def _initialize_client(self, sys_instruct, api_key, model_name):
-        """
-        Initializes the Google Generative AI client.
-        """
+    def generate_message(
+        self,
+        messages,
+        max_tokens,
+    ):
         try:
-            self.client = genai.Client(vertexai=False, api_key=api_key)
-            chat = self.client.chats.create(
-                model=model_name,
-                config=types.GenerateContentConfig(
-                    system_instruction=sys_instruct,
-                    tools=[qdrant_tools],
-                ),
+            response = self.anthropic.messages.create(
+                model=MODEL,
+                system=IDENTITY,
+                max_tokens=max_tokens,
+                messages=messages,
+                tools=TOOLS,
             )
-            logger.debug("Successfully initialized genai client.")
-            return chat
+            return response
         except Exception as e:
-            logger.info(f"Error initializing genai client: {e}")
-            raise  # Re-raise the exception to be handled in the caller (init)
+            return {"error": str(e)}
 
-    def _translate_english_query(self, query: str):
-        is_hebrew = any('\u0590' <= char <= '\u05FF' or '\uFB1D' <= char <= '\uFB4F' for char in query)
-        if is_hebrew:
-            logger.debug("Query is likely Hebrew, returning original query.")
-            return query
+    def process_user_input(self, user_input):
+        self.session_state.messages.append({"role": "user", "content": user_input})
 
-        translation_prompt = f"Translate the following English query to Hebrew: '{query}'. Return only the translation."
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=translation_prompt,
+        response_message = self.generate_message(
+            messages=self.session_state.messages,
+            max_tokens=2048,
         )
-        translated_query = response.text.strip()
-        logger.debug(f"Translated query to Hebrew: '{translated_query}'")
-        return translated_query
 
+        if "error" in response_message:
+            return f"An error occurred: {response_message['error']}"
 
-        
+        if response_message.content[-1].type == "tool_use":
+            tool_use = response_message.content[-1]
+            func_name = tool_use.name
+            func_params = tool_use.input
+            tool_use_id = tool_use.id
 
-    def _filter_fileds(self, response):
-        """
-        Filter the fields from the response.
-        """
-        query = None
-        parts = []
-        
+            result = self.handle_tool_use(func_name, func_params)
+            self.session_state.messages.append({"role": "assistant", "content": response_message.content})
+            self.session_state.messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "document",
+                            "tool_use_id": tool_use_id,
+                            "content": result,
+                            "context": "retrived articles from the RAG model",
+                            "citations": {"enabled": True},
+                        }
+                    ],
+                }
+            )
 
-        names = [fc.name for fc in response.function_calls]
-        logger.info(f"Received function calls: {names}")
-        if "recommendations_for_tv_and_movies" in names:
-            query = [r.args["query"] for r in response.function_calls if r.name == "recommendations_for_tv_and_movies"][0]
-            query = self._translate_english_query(query)
+            follow_up_response = self.generate_message(
+                messages=self.session_state.messages,
+                max_tokens=2048,
+            )
 
+            if "error" in follow_up_response:
+                return f"An error occurred: {follow_up_response['error']}"
+
+            response_text = follow_up_response.content[0].text
+            self.session_state.messages.append({"role": "assistant", "content": response_text})
+            return response_text
+
+        elif response_message.content[0].type == "text":
+            response_text = response_message.content[0].text
+            self.session_state.messages.append({"role": "assistant", "content": response_text})
+            return response_text
+
+        else:
+            raise Exception("An error occurred: Unexpected response type")
+
+    def handle_tool_use(self, func_name, func_params):
+        if func_name == "get_recommended":
+            query = func_params.get("query")
+            brand = func_params.get("filter_brand", None)
+            writer_name = func_params.get("filter_writer_name", None)
+            primary_section = func_params.get("filter_by_category", None)
+            logger.info(
+                f"query: {query}, brand: {brand}, writer_name: {writer_name}, primary_section: {primary_section}"
+            )
             _return = self.search_article.retrieve_relevant_documents(
                 query,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
-            
-            parts.append(
-                Part.from_function_response(
-                    name="recommendations_for_tv_and_movies",
-                    response={
-                        "content": _return,
-                    },
-                ),
-            )
+            return _return
 
-        logger.info(
-            f"Received response from LLM: query='{query}'")
-        
-
-        return parts
-
-    def send_message(self, message: str) -> str:
-        """
-        Sends a message within the chat session and returns the response text.
-
-        Args:
-            message (str): The user message to send.
-
-        Returns:
-            str: The text response from the LLM.
-            None: If there was an error during the API call.
-        """
-        logger.debug(f"Sending message to LLM: {message}")
-        response = self.chat_session.send_message(
-            message,
-            config=types.GenerateContentConfig(
-                system_instruction=self.sys_instruct,
-                tools=[qdrant_tools],
-            ),
-        )
-
-        if response.candidates[0].finish_message:
-            logger.info("Resetting chat session.")
-            self.chat_session = self._initialize_client(self.sys_instruct, self.api_key, self.model_name)
-            return "Error: " + response.candidates[0].finish_message
-
-        if not response.function_calls:
-            # if response.text is None:
-            #     logger.exception("Error in response from LLM.")
-            #     logger.info(f"Message that caused error: {message}")
-            #     return "שגיאה. נסה שוב"
-            return response
-
-        parts = self._filter_fileds(response)
-
-        logger.info(f"Sending message with parts: {[p.function_response.name for p in parts]}")
-        if len(parts) != len(response.function_calls):
-            logger.info(f"Error in parts: {parts}")
-            logger.info(f"Error in response: {response.function_calls}")
-            return "num function calls and parts do not match"
-        try:
-            response = self.chat_session.send_message(parts)
-        except Exception as e:
-            logger.info(f"Error sending message to LLM: {e}")
-            return "שגיאה. נסה שוב"
-        return response
-
-    def reset_chat_session(self):
-        """
-        Reset the chat session.
-        """
-        logger.info("Resetting chat session.")
-        self.chat_session = self._initialize_client(self.sys_instruct, self.api_key, self.model_name)
+        raise Exception("An unexpected tool was used")
 
 
 if __name__ == "__main__":
-    import datetime
-
 
     from config.load_config import load_config
 
-    try:
-        prompts = load_config("config/prompts.yaml")
-    except Exception as e:
-        logger.info(f"Error loading prompts config: {e}")
-        print("Error loading prompts configuration. Check logs for details.")
-        exit(1)
+    config = load_config("config/config.yaml")
 
-    sys_instruct = prompts["system_instructions"]
+    st.session_state.messages = []
 
-
-    try:
-        config = load_config("config/config.yaml")
-    except Exception as e:
-        logger.info(f"Error loading main config: {e}")
-        print("Error loading main configuration. Check logs for details.")
-        exit(1)
-
-    api_key = config["llm"].get("GOOGLE_API_KEY")
-    model_name = config["llm"].get("llm_model_name", "gemini-pro")
-
-    if not api_key:
-        logger.error("API Key not found in config.yaml. Please configure 'GOOGLE_API_KEY'.")
-        exit(1)
-
-    try:
-        llm_client = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
-    except Exception as e:
-        logger.info(f"Error initializing LLMClient in main: {e}")
-        print("Failed to initialize LLMApiClient. Check logs for errors.")
-        exit(1)
-
-    if llm_client and llm_client.chat_session:  # Check if client and session are initialized
-        print("Start chatting with the LLM (non-streaming). Type 'quit' to exit.")
-        while True:
-            user_message = input("You: ")
-            if user_message.lower() == "quit":
-                break
-
-            response = llm_client.send_message(user_message)
-            print("LLM: " + response.text)
-    else:
-        print("Failed to initialize LLMApiClient properly. Check logs for errors during initialization.")
+    llm_client = ChatBot(st.session_state, config)
+    print(llm_client.process_user_input(" תמליץ על סדרת מתח טובה בנטפליקס, שביים יצחק קורניצ'קיו ומשחקים בו ג'וש רדנור וג'יימי פוקס"))
