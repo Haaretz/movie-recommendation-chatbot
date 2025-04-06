@@ -69,7 +69,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
                 query_vector=query_embedding_vector,
                 limit=self.SEARCH_LIMIT,
                 score_threshold=self.MIN_SCORE_THRESHOLD,
-                query_filter=qdrant_filter,
+                # query_filter=qdrant_filter,
                 search_params=search_params,
             )
         except Exception as e:
@@ -90,5 +90,5 @@ if __name__ == "__main__":
     SA = SearchArticle(config)
   
 
-    result = SA.retrieve_relevant_documents(query="Oscar nominees")
+    result = SA.retrieve_relevant_documents(query="מחאה")
     print(result)

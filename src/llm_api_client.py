@@ -1,4 +1,5 @@
-import datetime
+import os
+import redis
 from typing import AsyncGenerator, List, Tuple, Dict, Any
 
 from google import genai
@@ -31,6 +32,13 @@ class LLMClient:
         except Exception as e:
             logger.info(f"Error initializing LLMClient: {e}")
             self.chat_session = None  # Handle initialization failure
+
+        # --- Redis Initialization ---
+        redis_url = os.getenv("REDIS_URL")
+        self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+        self.redis_client.ping()
+        logger.info("Successfully connected to Redis.")
+
 
     def _initialize_client(self, sys_instruct, api_key, model_name):
         """

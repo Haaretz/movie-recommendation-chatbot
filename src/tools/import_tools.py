@@ -48,7 +48,7 @@ if __name__ == "__main__":
     )
 
     prompt = """
-    סרטי ילדים מצויירים טובים
+שלום, קוראים לי משה, בא לי לראות סרט מצויר בסגנון פיקסר
     """
     response = chat.send_message(prompt)
     response.function_calls
