@@ -1,4 +1,7 @@
-
+filed_for_frontend:
+  - article_id
+  - article_name
+  - writer_name
 
 return_fields:
   article_name: שם המאמר
@@ -10,7 +13,7 @@ return_fields:
 
 
 
-bucket_name : ask-haaretz
+bucket_name : movie-recommendation-chatbot
 embedding:
   embedding_model_name : text-multilingual-embedding-002
   embedding_dimensionality : 768

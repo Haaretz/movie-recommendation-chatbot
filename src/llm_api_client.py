@@ -1,6 +1,7 @@
 import os
 import redis
 from typing import AsyncGenerator, List, Tuple, Dict, Any
+import json
 
 from google import genai
 from google.genai import types
@@ -26,6 +27,7 @@ class LLMClient:
         self.sys_instruct = sys_instruct
         self.api_key = api_key
         self.model_name = model_name
+        self.filed_for_frontend = config.get("filed_for_frontend", {})
         try:
             self.chat_session = self._initialize_client(self.sys_instruct, self.api_key, self.model_name)
             logger.info(f"LLMClient initialized for model: {model_name}")
@@ -35,8 +37,8 @@ class LLMClient:
 
         # --- Redis Initialization ---
         redis_url = os.getenv("REDIS_URL")
-        self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
-        self.redis_client.ping()
+        # self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+        # self.redis_client.ping()
         logger.info("Successfully connected to Redis.")
 
 
@@ -114,8 +116,9 @@ class LLMClient:
                     search_results = self.search_article.retrieve_relevant_documents(translated_query)
                     if len(search_results) == 0:
                         search_results = NO_RESULT
+                        return search_results,''
                     logger.info(f"Tool '{call_name}' executed successfully for query: '{translated_query}'. Results obtained.")
-                    logger.debug(f"Search results: {search_results}")
+                    # logger.debug(f"Search results: {search_results}")
                      # Ensure results are serializable (e.g., string or basic dict/list)
 
 
@@ -147,17 +150,24 @@ class LLMClient:
                 logger.warning(f"Received unhandled function call: {call_name}")
                 # Optionally handle other function calls or ignore them
 
+
+        metadata = self.metadata_for_backend(search_results)
+
         logger.info(f"Generated {len(parts)} function response parts.")
-        return parts
+        return parts,metadata
+
+    
+    def metadata_for_backend(self, metadata):
+        
+        # metadata = [s.model_dump()['payload'] for s in metadata]
+        metadata = [{key: item[key] for key in self.filed_for_frontend} for item in metadata]
+        return json.dumps(metadata)
 
     
     async def streaming_message(self, message: str) -> AsyncGenerator[str, None]:
         """
         Sends message, handles streaming and function calls. Minimal error checks.
         """
-        # Removed checks for self.chat_session / self.client
-
-        # logger.info(f"Sending message to model: '{message}'")
         stream = self.chat_session.send_message_stream(message)
 
         collected_function_calls: List[FunctionCall] = []
@@ -175,7 +185,8 @@ class LLMClient:
         # --- Phase 2 & 3: Process calls, send responses, stream final answer ---
         if current_turn_involved_function_call:
 
-            function_response_parts = self._filter_fields_and_call_tool(collected_function_calls)
+            function_response_parts, metadata = self._filter_fields_and_call_tool(collected_function_calls)
+            yield metadata
 
             response_stream_after_fc = self.chat_session.send_message_stream(
                 function_response_parts,
