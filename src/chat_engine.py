@@ -22,7 +22,6 @@ def process_message(message, chat_history, session_timestamp):
     if message is None or message == "":
         return
 
-
     formatted_history = []
     if chat_history:
         formatted_history = chat_history
@@ -131,9 +130,7 @@ if __name__ == "__main__":
             try:
                 user_message = history[-1]["content"]
                 full_history = history
-                for response in process_message(
-                    user_message, full_history[:-1], session_timestamp
-                ):
+                for response in process_message(user_message, full_history[:-1], session_timestamp):
                     yield response
             except Exception as e:
                 logger.info(f"Error in bot_response: {e}")
@@ -154,7 +151,6 @@ if __name__ == "__main__":
         )
 
         clear_button.click(reset_chat_and_timestamp, outputs=[session_timestamp_state])
-
 
     try:
         iface = demo.launch(

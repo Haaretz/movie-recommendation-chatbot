@@ -1,13 +1,14 @@
-import uvicorn
 import os
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from typing import AsyncGenerator
 
-from src.llm_api_client import LLMClient 
-from config.load_config import load_config 
-from logger import logger 
+import uvicorn
+from fastapi import Body, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from config.load_config import load_config
+from logger import logger
+from src.llm_api_client import LLMClient
 
 prompts = load_config("config/prompts.yaml")
 config = load_config("config/config.yaml")
@@ -17,21 +18,17 @@ sys_instruct = prompts.get("system_instructions")
 api_key = config.get("llm", {}).get("GOOGLE_API_KEY")
 model_name = config.get("llm", {}).get("llm_model_name")
 
-llm_client_instance = LLMClient(
-    model_name=model_name,
-    api_key=api_key,
-    sys_instruct=sys_instruct,
-    config=config 
-)
+llm_client_instance = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
+
 
 class ChatMessage(BaseModel):
     message: str
 
+
 app = FastAPI(
-    title="LLM Streaming Chat API",
-    description="API for interacting with the LLM via streaming.",
-    version="1.0.0"
+    title="LLM Streaming Chat API", description="API for interacting with the LLM via streaming.", version="1.0.0"
 )
+
 
 async def stream_llm_response(user_message: str) -> AsyncGenerator[str, None]:
     """
@@ -51,10 +48,8 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    return StreamingResponse(
-        stream_llm_response(user_message),
-        media_type="text/plain" 
-    )
+    return StreamingResponse(stream_llm_response(user_message), media_type="text/plain")
+
 
 @app.get("/health")
 async def health_check():
@@ -67,7 +62,8 @@ async def health_check():
     else:
         raise HTTPException(status_code=503, detail={"status": "error", "llm_client": "not_initialized"})
 
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080)) 
+    port = int(os.environ.get("PORT", 8080))
     logger.info(f"Starting Uvicorn server on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)

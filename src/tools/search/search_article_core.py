@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from qdrant_client import models
 
@@ -55,11 +55,10 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         Returns:
             Formatted string of relevant documents. Returns NO_RESULT if no relevant documents found.
         """
-        logger.info(
-            f"Retrieving relevant documents for query: '{query}'")
+        logger.info(f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter()
+        # qdrant_filter = self._create_qdrant_filter()
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
@@ -88,7 +87,6 @@ if __name__ == "__main__":
     config = load_config("config/config.yaml")
 
     SA = SearchArticle(config)
-  
 
     result = SA.retrieve_relevant_documents(query="מחאה")
     print(result)

@@ -1,7 +1,6 @@
 from google import genai
 from google.genai.types import Tool
 
-
 get_articles = {
     "name": "recommendations_for_tv_and_movies",
     "description": """
@@ -18,7 +17,6 @@ get_articles = {
         "required": ["query"],
     },
 }
-
 
 
 qdrant_tools = Tool(
