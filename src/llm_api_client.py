@@ -162,7 +162,7 @@ class LLMClient:
     def metadata_for_backend(self, metadata):
         # Filter metadata fields as defined in the configuration.
         metadata = [{key: item[key] for key in self.filed_for_frontend} for item in metadata]
-        return json.dumps(metadata)
+        return json.dumps(metadata, ensure_ascii=False)
 
     def _load_history_from_redis(self, user_id: str) -> List[Content]:
         """
@@ -266,7 +266,7 @@ class LLMClient:
             assistant_content = Content(
                 role="model", parts=[Part(text=full_response_text, function_call=collected_function_calls[0])]
             )
-            search_results = json.dumps(search_results)
+            search_results = json.dumps(search_results, ensure_ascii=False)
             function_output_content = Content(role="model", parts=[Part(text=search_results)])
             self._save_message_to_redis(user_id, assistant_content)
             self._save_message_to_redis(user_id, function_output_content)
@@ -301,7 +301,7 @@ async def main_cli():
 
         print("LLM: ", end="", flush=True)
         full_response = ""
-        async for chunk in llm_client.streaming_message(user_message, user_id="005"):
+        async for chunk in llm_client.streaming_message(user_message, user_id="006"):
             print(chunk, end="", flush=True)
             if chunk:
                 full_response += chunk
