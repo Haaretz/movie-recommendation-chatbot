@@ -23,6 +23,7 @@ llm_client_instance = LLMClient(model_name=model_name, api_key=api_key, sys_inst
 
 class ChatMessage(BaseModel):
     message: str
+    user_id: str
 
 
 app = FastAPI(
@@ -30,13 +31,13 @@ app = FastAPI(
 )
 
 
-async def stream_llm_response(user_message: str) -> AsyncGenerator[str, None]:
+async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator[str, None]:
     """
     Asynchronous generator that yields chunks from the LLM's streaming response.
     Handles function calls internally via the LLMClient.
     """
     logger.info(f"Received streaming request: '{user_message}'")
-    async for chunk in llm_client_instance.streaming_message(user_message):
+    async for chunk in llm_client_instance.streaming_message(user_message, user_id):
         if isinstance(chunk, str):
             yield chunk
 
@@ -45,10 +46,11 @@ async def stream_llm_response(user_message: str) -> AsyncGenerator[str, None]:
 async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
 
     user_message = chat_message.message
+    user_id = chat_message.user_id
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    return StreamingResponse(stream_llm_response(user_message), media_type="text/plain")
+    return StreamingResponse(stream_llm_response(user_message, user_id), media_type="text/plain")
 
 
 @app.get("/health")

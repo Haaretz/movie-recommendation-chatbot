@@ -58,7 +58,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         logger.info(f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
-        # qdrant_filter = self._create_qdrant_filter()
+        qdrant_filter = self._create_qdrant_filter()
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
@@ -67,8 +67,9 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
                 collection_name=self.qdrant_collection_name,
                 query_vector=query_embedding_vector,
                 limit=self.SEARCH_LIMIT,
-                score_threshold=self.MIN_SCORE_THRESHOLD,
-                # query_filter=qdrant_filter,
+                # score_threshold=self.MIN_SCORE_THRESHOLD,
+                score_threshold=0.1,
+                query_filter=qdrant_filter,
                 search_params=search_params,
             )
         except Exception as e:
@@ -88,5 +89,5 @@ if __name__ == "__main__":
 
     SA = SearchArticle(config)
 
-    result = SA.retrieve_relevant_documents(query="מחאה")
+    result = SA.retrieve_relevant_documents(query="אנמציה")
     print(result)
