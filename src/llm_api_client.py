@@ -251,7 +251,7 @@ class LLMClient:
             )
             yield metadata
 
-            response_stream_after_fc = self.chat_session.send_message_stream(function_response_parts)
+            response_stream_after_fc = current_chat_session.send_message_stream(function_response_parts)
             for final_chunk in response_stream_after_fc:
                 if final_chunk.text:
                     yield final_chunk.text
@@ -301,14 +301,81 @@ async def main_cli():
 
         print("LLM: ", end="", flush=True)
         full_response = ""
-        async for chunk in llm_client.streaming_message(user_message, user_id="006"):
+        import numpy as np
+
+        async for chunk in llm_client.streaming_message(user_message, user_id=np.random.randint(1, 99999)):
             print(chunk, end="", flush=True)
             if chunk:
                 full_response += chunk
         print()
 
 
+async def run_test():
+    first_question_article = [
+        {
+            "article_id": "00000194-25d6-dcc4-a1d7-3df6703c0000",
+            "question": "אני רוצה לקרוא ביקורת על הסרט החדש של לוקה גואדנינו, זה שמבוסס על ספר של בורוז על הומו שחי במקסיקו בשנות ה-50 ומחפש גברים צעירים.",
+        },
+        {
+            "article_id": "00000194-2618-dd68-a3be-e6fc06680000",
+            "question": 'אני מחפש ביקורת על הסרט החדש עם ניקול קידמן, זה שהיא משחקת בו מנכ"לית חברת רובוטיקה שיש לה רומן עם מתמחה צעיר. הסרט הוקרן בפסטיבל ונציה, איך הוא?.',
+        },
+        {
+            "article_id": "00000194-2681-ddb6-afdd-77e781220000",
+            "question": "אני מחפש ביקורת על הסרט החדש של עמוס גיתאי, זה שעוסק בשאלה למה יש מלחמות ומשתמש במכתבים של איינשטיין ופרויד.",
+        },
+        {
+            "article_id": "00000194-2b97-d9c2-a79e-2bd7330c0000",
+            "question": 'אפשר בבקשה ביקורת על הסרט החדש "נוספרטו" של רוברט אגרס? אני רוצה לדעת אם הוא נאמן למקורות של סרטי הערפדים הקלאסיים ואיך השחקנים הראשיים, במיוחד לילי-רוז דפ, משחקים?',
+        },
+        {
+            "article_id": "00000194-319b-d555-abbc-b1dfdf250000",
+            "question": '"אני מחפש ביקורת על סרט חדש שמוקרן בפסטיבל חיפה, על אישה אלכוהוליסטית בשם רונה שחוזרת לאי הולדתה בסקוטלנד כדי להתמודד עם ההתמכרות שלה. מישהי כתבה על זה ביקורת?',
+        },
+        {
+            "article_id": "00000194-31db-ddaf-adb7-7bfbaf200000",
+            "question": "אני מחפש סרט איראני חדש שמתרחש בטהרן ועוסק במשפחה שאבא שלה שופט ורואים בו גם קטעים מההפגנות שם. ראיתי שהקרינו אותו בפסטיבל חיפה",
+        },
+        {
+            "article_id": "00000194-34df-d39d-a196-b7ff86ce0000",
+            "question": '"אני מחפש סדרת אנימציה חדשה בנטפליקס, משהו בסגנון באפי קוטלת הערפדים אבל עם מיתולוגיה סינית. שמעתי שיש סדרה על נערה סינית-אמריקאית שנלחמת בשדים, מישהו מכיר?',
+        },
+        {
+            "article_id": "00000194-356b-de88-a3dc-75ef26460000",
+            "question": "אוקיי, שמעתי על סרט חדש של שבי גביזון עם ריצ'רד גיר על אבא שמגלה שהיה לו בן שנהרג. איך קוראים לסרט ומה הוא מספר עליו?",
+        },
+    ]
+    from config.load_config import load_config
+
+    prompts = load_config("config/prompts.yaml")
+    sys_instruct = prompts.get("system_instructions")
+    config = load_config("config/config.yaml")
+    llm_config = config.get("llm", {})
+    api_key = llm_config.get("GOOGLE_API_KEY")
+    model_name = llm_config.get("llm_model_name")
+
+    result = []
+    import numpy as np
+
+    counter = np.random.randint(1, 99999)
+
+    llm_client = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
+    for q in first_question_article:
+        article_id = q.get("article_id")
+        question = q.get("question")
+        print(f"Article ID: {article_id}")
+        print(f"Question: {question}")
+        full_response = ""
+        async for chunk in llm_client.streaming_message(question, f"{counter}"):
+            full_response += chunk
+            print(chunk, end="", flush=True)
+        counter += 1
+
+        result.append({"article_id": article_id, "question": question, "answer": full_response})
+
+
 if __name__ == "__main__":
     import asyncio
 
-    asyncio.run(main_cli())
+    # asyncio.run(main_cli())
+    asyncio.run(run_test())
