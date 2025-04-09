@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import redis
 from google import genai
 from google.genai import types
-from google.genai.types import Content, FunctionCall, FunctionResponse, Part
+from google.genai.types import Content, FunctionCall, Part
 
 from constant import NO_RESULT
 from logger import logger
@@ -19,9 +19,10 @@ class LLMClient:
         Initialize the LLMApiClient using the chat conversation API.
 
         Args:
-            model_name (str): The name of the language model to use (e.g., "gemini-pro", "gemini-2.0-flash").
+            model_name (str): The language model to use (e.g., "gemini-pro", "gemini-2.0-flash").
             api_key (str): The API key for accessing the LLM service.
-            sys_instruct (str, optional): System instructions (not directly used in this chat API example). Defaults to None.
+            sys_instruct (str): System instructions.
+            config: Configuration data.
         """
         self.search_article = SearchArticle(config)
         self.sys_instruct = sys_instruct
@@ -58,28 +59,27 @@ class LLMClient:
             return chat
         except Exception as e:
             logger.info(f"Error initializing genai client: {e}")
-            raise  # Re-raise the exception to be handled in the caller (init)
+            raise  # Re-raise the exception to be handled in __init__
 
-    def _create_chat_session(self, history: Optional[List[Content]] = None) -> Optional[genai.ChatSession]:
+    def _create_chat_session(self, history: Optional[List[Content]] = None):
         """
-        Creates a new chat session, optionally initialized with provided history.
-        Uses the base client initialized in __init__.
+        Creates a new chat session with the provided history.
         """
-        if not self.client:
-            logger.error("Base GenerativeModel client not initialized. Cannot create chat session.")
-            return None
-        try:
-            # Start chat using the already configured GenerativeModel instance
-            chat = self.client.start_chat(
-                history=history if history else [], enable_automatic_function_calling=True  # Enable automatic calling
-            )
-            logger.debug("Successfully created new chat session.")
-            return chat
-        except Exception as e:
-            logger.error(f"Error creating chat session: {e}", exc_info=True)
-            return None  # Return None on failure
+        chat = self.client.chats.create(
+            model=self.model_name,
+            history=history,
+            config=types.GenerateContentConfig(
+                system_instruction=self.sys_instruct,
+                tools=[qdrant_tools],
+            ),
+        )
+        logger.debug("Successfully created new chat session.")
+        return chat
 
     def _translate_english_query(self, query: str):
+        """
+        Translates an English query to Hebrew if needed.
+        """
         is_hebrew = any("\u0590" <= char <= "\u05FF" or "\uFB1D" <= char <= "\uFB4F" for char in query)
         if is_hebrew:
             logger.debug("Query is likely Hebrew, returning original query.")
@@ -97,13 +97,7 @@ class LLMClient:
     def _filter_fields_and_call_tool(self, function_calls):
         """
         Processes detected function calls, executes the tool, and returns response parts.
-
-        Args:
-            function_calls (list): List of FunctionCall objects from the LLM response.
-
-        Returns:
-            list: A list of Part objects containing function responses.
-                  Returns an empty list if no relevant function calls are found or errors occur.
+        Also saves function call information to Redis.
         """
         parts = []
         processed_call_names = set()
@@ -124,182 +118,169 @@ class LLMClient:
                             response={"error": f"שגיאה: לא סופק 'query' לקריאה לפונקציה {call_name}."},
                         )
                     )
-
                 else:
                     translated_query = self._translate_english_query(query)
-                try:
-                    search_results = self.search_article.retrieve_relevant_documents(translated_query)
-                    if len(search_results) == 0:
-                        search_results = NO_RESULT
-                        return search_results, ""
-                    logger.info(
-                        f"Tool '{call_name}' executed successfully for query: '{translated_query}'. Results obtained."
-                    )
-                    # logger.debug(f"Search results: {search_results}")
-                    # Ensure results are serializable (e.g., string or basic dict/list)
-
-                    # Create the function response Part
-                    parts.append(
-                        Part.from_function_response(
-                            name=call_name,
-                            response={
-                                "content": search_results,
-                            },
+                    try:
+                        search_results = self.search_article.retrieve_relevant_documents(translated_query)
+                        if len(search_results) == 0:
+                            search_results = NO_RESULT
+                            return search_results, ""
+                        logger.info(
+                            f"Tool '{call_name}' executed successfully for query: '{translated_query}'. Results obtained."
                         )
-                    )
-                    processed_call_names.add(call_name)  # Mark as processed
-
-                except Exception as e:
-                    logger.error(f"Error executing tool for function call {call_name}: {e}", exc_info=True)
-                    # Optionally append an error response part
-                    parts.append(
-                        Part.from_function_response(
-                            name=call_name,
-                            response={
-                                "content": f"שגיאה בביצוע החיפוש עבור: '{translated_query}'. {str(e)}",
-                            },
+                        parts.append(
+                            Part.from_function_response(
+                                name=call_name,
+                                response={
+                                    "content": search_results,
+                                },
+                            )
                         )
-                    )
-                    processed_call_names.add(call_name)  # Mark as processed even if error occurred
-
+                        processed_call_names.add(call_name)
+                        # Save the function call information into Redis
+                        self._save_function_call_to_redis(
+                            "123", {"name": call_name, "args": call_args, "translated_query": translated_query}
+                        )
+                    except Exception as e:
+                        logger.error(f"Error executing tool for function call {call_name}: {e}", exc_info=True)
+                        parts.append(
+                            Part.from_function_response(
+                                name=call_name,
+                                response={
+                                    "content": f"שגיאה בביצוע החיפוש עבור: '{translated_query}'. {str(e)}",
+                                },
+                            )
+                        )
+                        processed_call_names.add(call_name)
             else:
                 logger.warning(f"Received unhandled function call: {call_name}")
-                # Optionally handle other function calls or ignore them
 
         metadata = self.metadata_for_backend(search_results)
-
         logger.info(f"Generated {len(parts)} function response parts.")
-        return parts, metadata
+        return parts, metadata, search_results
 
     def metadata_for_backend(self, metadata):
-
-        # metadata = [s.model_dump()['payload'] for s in metadata]
+        # Filter metadata fields as defined in the configuration.
         metadata = [{key: item[key] for key in self.filed_for_frontend} for item in metadata]
         return json.dumps(metadata)
 
     def _load_history_from_redis(self, user_id: str) -> List[Content]:
+        """
+        Loads the chat history for a given user from Redis.
+        Uses a Redis list where each element is a JSON-encoded message.
+        """
         key = f"chat_history:{user_id}"
-        json_history = self.redis_client.get(key)
-        if json_history:
+        # Retrieve all elements from the list
+        json_history_list = self.redis_client.lrange(key, 0, -1)
+        if json_history_list:
             logger.debug(f"Loaded history for user {user_id} from Redis.")
-            return self._deserialize_history(json_history)
+            # Deserialize each message into a Content object
+            return [self._deserialize_message(message_str) for message_str in json_history_list]
         else:
             logger.debug(f"No history found for user {user_id} in Redis.")
             return []
 
-    def _serialize_history(self, history: List[Content]) -> str:
-        """Serializes chat history (list of Content objects) to a JSON string."""
-        serializable_history = []
-        for content in history:
-            serializable_parts = [self._serialize_part(part) for part in content.parts if part]  # Filter empty parts
-            if serializable_parts:  # Only add if there are valid parts
-                serializable_history.append({"role": content.role, "parts": serializable_parts})
-        return json.dumps(serializable_history)
+    def _save_message_to_redis(self, user_id: str, message: Content) -> None:
+        """
+        Saves a single chat message to Redis as a JSON-encoded string.
+        Appends the new message to the end of the Redis list.
+        """
+        key = f"chat_history:{user_id}"
+        serialized = self._serialize_message(message)
+        self.redis_client.rpush(key, serialized)
 
-    def _serialize_part(self, part: Part) -> Dict[str, Any]:
-        """Serializes a Part object to a dictionary."""
-        if part.text:
-            return {"text": part.text}
-        elif part.function_call:
-            return {"function_call": {"name": part.function_call.name, "args": dict(part.function_call.args)}}
-        elif part.function_response:
-            return {
-                "function_response": {
-                    "name": part.function_response.name,
-                    "response": dict(part.function_response.response),
-                }
+    def _save_function_call_to_redis(self, user_id: str, function_call: Dict[str, Any]) -> None:
+        """
+        Saves function call information to Redis.
+        The function call is stored as a JSON message with role 'function'.
+        """
+        key = f"chat_history:{user_id}"
+        serialized = json.dumps({"role": "function", "function_call": function_call})
+        self.redis_client.rpush(key, serialized)
+
+    def _serialize_message(self, message: Content) -> str:
+        """
+        Serializes a Content object into a JSON string.
+        Only the 'role' and the text of each 'part' are stored.
+        """
+        return json.dumps(
+            {
+                "role": message.role,
+                "parts": [part.text for part in message.parts],
             }
-        else:
-            # Handle potential other part types or empty parts
-            logger.warning("Serializing an unknown or empty Part type.")
-            return {}
+        )
 
-    def _deserialize_history(self, json_string: str) -> List[Content]:
-        """Deserializes a JSON string back into chat history (list of Content objects)."""
-        history_data = json.loads(json_string)
-        history = []
-        for item in history_data:
-            role = item.get("role", "user")
-            if not role:
-                logger.error(f"History item missing role: {item}")
-                continue  # Skip malformed item
-
-            parts_data = item.get("parts", [])
-            deserialized_parts = []
-            for part_data in parts_data:
-                part = self._deserialize_part(part_data)
-                if part:  # Only add successfully deserialized parts
-                    deserialized_parts.append(part)
-
-                if deserialized_parts:  # Only add Content if it has parts
-                    history.append(Content(role=role, parts=deserialized_parts))
-                else:
-                    logger.warning(f"Skipping history item with no valid parts after deserialization: {item}")
-
-        return history
-
-    def _deserialize_part(self, data: Dict[str, Any]) -> Optional[Part]:
-        """Deserializes a dictionary back to a Part object."""
-        if "text" in data:
-            return Part(text=data["text"])
-        elif "function_call" in data:
-            fc_data = data["function_call"]
-            return Part(function_call=FunctionCall(name=fc_data["name"], args=fc_data["args"]))
-        elif "function_response" in data:
-            fr_data = data["function_response"]
-            # Use Part.from_function_response helper if available and appropriate,
-            # otherwise construct manually or adjust based on library specifics.
-            # Assuming direct construction works or response is simple dict:
-            return Part(function_response=FunctionResponse(name=fr_data["name"], response=fr_data["response"]))
-            # Alternative using helper (might need adjustments):
-            # return Part.from_function_response(name=fr_data["name"], response=fr_data["response"])
-        else:
-            logger.warning(f"Deserializing an unknown Part structure: {data}")
-            return None
+    def _deserialize_message(self, message_str: str) -> Content:
+        """
+        Deserializes a JSON string into a Content object.
+        """
+        data = json.loads(message_str)
+        parts = [Part(text=part_text) for part_text in data.get("parts", [])]
+        return Content(role=data["role"], parts=parts)
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         """
-        Sends message, handles streaming and function calls. Minimal error checks.
+        Sends a message, handles streaming response, processes function calls, and saves updated history in Redis.
         """
-        # loaded_history = self._load_history_from_redis(user_id)
-
-        stream = self.chat_session.send_message_stream(message)
-
         collected_function_calls: List[FunctionCall] = []
         current_turn_involved_function_call = False
 
-        # --- Phase 1: Consume initial stream, yield text, collect calls ---
-        # logger.debug("Starting Phase 1: Consuming initial model stream...")
+        # 1. Load history from Redis (each message is stored separately)
+        loaded_history = self._load_history_from_redis(user_id)
+
+        # 2. Create a new chat session with the loaded history
+        current_chat_session = self._create_chat_session(history=loaded_history)
+
+        full_response_text = ""  # To collect full text response from the assistant
+
+        # 3. Send the message using the chat session streaming
+        stream = current_chat_session.send_message_stream(message)
+
         for chunk in stream:
             if chunk.text:
                 yield chunk.text
+                full_response_text += chunk.text
             if chunk.candidates[0].content.parts[0].function_call:
                 collected_function_calls.append(chunk.candidates[0].content.parts[0].function_call)
                 current_turn_involved_function_call = True
 
-        # --- Phase 2 & 3: Process calls, send responses, stream final answer ---
         if current_turn_involved_function_call:
-
-            function_response_parts, metadata = self._filter_fields_and_call_tool(collected_function_calls)
+            # Process the function call: execute tool and update with metadata
+            function_response_parts, metadata, search_results = self._filter_fields_and_call_tool(
+                collected_function_calls
+            )
             yield metadata
 
-            response_stream_after_fc = self.chat_session.send_message_stream(
-                function_response_parts,
-            )
+            response_stream_after_fc = self.chat_session.send_message_stream(function_response_parts)
             for final_chunk in response_stream_after_fc:
                 if final_chunk.text:
                     yield final_chunk.text
+                    full_response_text += final_chunk.text  # TODO: consider if need to save the output seaprately
+
+        # 4. Create Content objects for the user message and the assistant's response
+        user_content = Content(role="user", parts=[Part(text=message)])
+        self._save_message_to_redis(user_id, user_content)
+
+        if current_turn_involved_function_call:
+            # Create an assistant message with embedded function call info
+            assistant_content = Content(
+                role="model", parts=[Part(text=full_response_text, function_call=collected_function_calls[0])]
+            )
+            search_results = json.dumps(search_results)
+            function_output_content = Content(role="model", parts=[Part(text=search_results)])
+            self._save_message_to_redis(user_id, assistant_content)
+            self._save_message_to_redis(user_id, function_output_content)
+        else:
+            assistant_content = Content(role="model", parts=[Part(text=full_response_text)])
+            self._save_message_to_redis(user_id, assistant_content)
 
 
 async def main_cli():
     from config.load_config import load_config
 
     prompts = load_config("config/prompts.yaml")
-
     sys_instruct = prompts.get("system_instructions")
-
     config = load_config("config/config.yaml")
-
     llm_config = config.get("llm", {})
     api_key = llm_config.get("GOOGLE_API_KEY")
     model_name = llm_config.get("llm_model_name")
@@ -320,7 +301,7 @@ async def main_cli():
 
         print("LLM: ", end="", flush=True)
         full_response = ""
-        async for chunk in llm_client.streaming_message(user_message):
+        async for chunk in llm_client.streaming_message(user_message, user_id="005"):
             print(chunk, end="", flush=True)
             if chunk:
                 full_response += chunk

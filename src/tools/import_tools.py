@@ -4,7 +4,8 @@ from google.genai.types import Tool
 get_articles = {
     "name": "recommendations_for_tv_and_movies",
     "description": """
-    Use this function when the user is asking about TV and movie shows.
+    Primary Trigger: The user's input explicitly asks for suggestions, recommendations, or ideas on what movies or TV shows to watch.
+    Keywords (Examples): "recommend," "suggest," "watch," "movie," "series," "TV show," "like," "similar to."
     """,
     "parameters": {
         "type": "object",
