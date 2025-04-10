@@ -3,6 +3,7 @@ from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -20,6 +21,13 @@ model_name = config.get("llm", {}).get("llm_model_name")
 
 llm_client_instance = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
 
+origins = [
+    "https://localhost",
+    "https://localhost:3000",
+    "https://react-stage.haaretz.co.il",
+    "https://canary.haaretz.co.il",
+]
+
 
 class ChatMessage(BaseModel):
     message: str
@@ -28,6 +36,14 @@ class ChatMessage(BaseModel):
 
 app = FastAPI(
     title="LLM Streaming Chat API", description="API for interacting with the LLM via streaming.", version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["POST"],
+    allow_headers=["*"],
 )
 
 
