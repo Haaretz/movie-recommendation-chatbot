@@ -23,6 +23,7 @@ llm_client_instance = LLMClient(model_name=model_name, api_key=api_key, sys_inst
 
 origins = [
     "https://localhost",
+    "https://localhost.haaretz.co.il",
     "https://localhost:3000",
     "https://react-stage.haaretz.co.il",
     "https://canary.haaretz.co.il",
