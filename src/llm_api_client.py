@@ -67,6 +67,7 @@ class LLMClient:
         response = self.client.models.generate_content(
             model=self.model_name,
             contents=translation_prompt,
+            config=genai.types.GenerateContentConfig(thinking_config=genai.types.ThinkingConfig(thinking_budget=1024)),
         )
         translated_query = response.text.strip()
         logger.debug(f"Translated query to Hebrew: '{translated_query}'")
@@ -218,7 +219,16 @@ class LLMClient:
             if chunk.text:
                 yield chunk.text
                 full_response_text += chunk.text
-            if chunk.candidates[0].content.parts[0].function_call:
+            if (
+                chunk.candidates
+                and chunk.candidates[0].content
+                and chunk.candidates[0].content.parts
+                and isinstance(chunk.candidates[0].content.parts, list)
+                and len(chunk.candidates[0].content.parts) > 0
+                and chunk.candidates[0].content.parts[0]
+                and hasattr(chunk.candidates[0].content.parts[0], "function_call")
+                and chunk.candidates[0].content.parts[0].function_call
+            ):
                 collected_function_calls.append(chunk.candidates[0].content.parts[0].function_call)
                 current_turn_involved_function_call = True
 
@@ -230,11 +240,14 @@ class LLMClient:
             yield metadata
 
             response_stream_after_fc = current_chat_session.send_message_stream(function_response_parts)
-            for final_chunk in response_stream_after_fc:
-                if final_chunk.text:
-                    yield final_chunk.text
-                    full_response_text += final_chunk.text  # TODO: consider if need to save the output seaprately
-
+            try:
+                for final_chunk in response_stream_after_fc:
+                    if final_chunk.text:
+                        yield final_chunk.text
+                        full_response_text += final_chunk.text  # TODO: consider if need to save the output seaprately
+            except Exception as e:
+                logger.error(f"Error during function call response streaming: {e}", exc_info=True)
+                yield f"Error during function call response streaming: {e}"
         # 4. Create Content objects for the user message and the assistant's response
         user_content = Content(role="user", parts=[Part(text=message)])
         self._save_message_to_redis(user_id, user_content)
@@ -254,6 +267,8 @@ class LLMClient:
 
 
 async def main_cli():
+    import numpy as np
+
     from config.load_config import load_config
 
     prompts = load_config("config/prompts.yaml")
@@ -264,6 +279,7 @@ async def main_cli():
     model_name = llm_config.get("llm_model_name")
 
     llm_client = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
+    counter = np.random.randint(1, 99999)
     while True:
         user_message = input("You: ")
         if user_message.lower() == "quit":
@@ -279,9 +295,8 @@ async def main_cli():
 
         print("LLM: ", end="", flush=True)
         full_response = ""
-        import numpy as np
 
-        async for chunk in llm_client.streaming_message(user_message, user_id=np.random.randint(1, 99999)):
+        async for chunk in llm_client.streaming_message(user_message, user_id=counter):
             print(chunk, end="", flush=True)
             if chunk:
                 full_response += chunk

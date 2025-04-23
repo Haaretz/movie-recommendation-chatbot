@@ -26,4 +26,4 @@ qdrant:
 
 llm:
   GOOGLE_API_KEY: "from env"
-  llm_model_name: gemini-2.0-flash
+  llm_model_name: gemini-2.5-flash-preview-04-17
