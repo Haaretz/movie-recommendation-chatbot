@@ -6,9 +6,12 @@ from src.tools.search.search_article_core import SearchArticle
 
 IDENTITY = """You are a friendly and knowledgeable AI create by Haaretz group.
 Your role is to recommend about TV shows and movies based on the user's preferences.
+Your presonality is friendly and helpful, somewhat like a friend who is a movie buff.
+dont answer the user from your own knowledge, but rather use the tools provided to you to find the answer.
+Answer the user in the same language as the question.
 """
 
-MODEL = "claude-3-haiku-20240307"
+MODEL = "claude-3-5-sonnet-20241022"
 
 # prompt by antropic for the tool_use
 chain_of_thought = """
@@ -18,21 +21,51 @@ Answer the user's request using relevant tools (if they are available). Before c
 TOOLS = [
     {
         "name": "get_recommended",
-        "description": "Provide movie or TV show recommendations based on user preferences. The tool will return a list of articles that match the user's preferences. Use the tool if the user asks for a movie or series recommendation.",
+        "description": """
+        Retrieves movie or TV data. The tool will return a list of articles that match the user's preferences. Use the tool if the user asks for a movie or series recommendation, if the user asks for a specific movie or series and you need to find more information about it or looking for movie or series.
+        """,
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "the user query to retrieve relevant articles"},
+                "query": {
+                    "type": "string",
+                    "description": "the user query to retrieve relevant articles in Hebrew. inclde relevant ditails about the user preferences include the genre, the type of the movie or series, the year of release, and any other relevant information.",
+                },
             },
         },
     }
 ]
 
 
+def create_answer_from_tool(data: list) -> str:
+    """
+    Create a formatted answer from the tool's response.
+
+    Args:
+        data: List of dictionaries containing article information.
+
+    Returns:
+        Formatted string of articles.
+    """
+    if not data:
+        return "No relevant articles found."
+
+    # insert the articles into the answer
+
+    prompt = "Here are some articles that match the user's preferences:\n <information>"
+    articles = []
+    for idx, article in enumerate(data):
+        article_name = article.get("article_name", "No article name")
+        text = article.get("text", "No text")
+        articles.append(f"{idx + 1}. {article_name}: {text}")
+
+    end_prompt = "</information> Please answer the question using the relevant information."
+    return prompt + "\n".join(articles) + end_prompt
+
+
 class ChatBot:
-    def __init__(self, session_state, config):
+    def __init__(self, config):
         self.anthropic = Anthropic()
-        self.session_state = session_state
         self.search_article = SearchArticle(config)
 
     def generate_message(
@@ -42,18 +75,18 @@ class ChatBot:
     ):
         response = self.anthropic.messages.create(
             model=MODEL,
-            system=IDENTITY,
+            system=IDENTITY + chain_of_thought,
             max_tokens=max_tokens,
             messages=messages,
             tools=TOOLS,
         )
         return response
 
-    def process_user_input(self, user_input):
-        self.session_state.messages.append({"role": "user", "content": user_input})
+    def process_user_input(self, user_input, session_state):
+        session_state.messages.append({"role": "user", "content": user_input})
 
         response_message = self.generate_message(
-            messages=self.session_state.messages,
+            messages=session_state.messages,
             max_tokens=2048,
         )
 
@@ -61,31 +94,31 @@ class ChatBot:
             return f"An error occurred: {response_message['error']}"
 
         if response_message.content[-1].type == "tool_use":
+            logger.info(
+                f"Tool use detected: {response_message.content[-1].name}, params: {response_message.content[-1].input}"
+            )
             tool_use = response_message.content[-1]
             func_name = tool_use.name
             func_params = tool_use.input
             tool_use_id = tool_use.id
 
             result = self.handle_tool_use(func_name, func_params)
-            self.session_state.messages.append({"role": "assistant", "content": response_message.content})
-            self.session_state.messages.append(
+            session_state.messages.append({"role": "assistant", "content": response_message.content})
+            session_state.messages.append(
                 {
                     "role": "user",
                     "content": [
                         {
-                            "type": "document",
+                            "type": "tool_result",
                             "tool_use_id": tool_use_id,
-                            "source": {"type": "content", "id": "retrieved_articles"},
-                            "content": result,
-                            "context": "retrived articles from the RAG model",
-                            "citations": {"enabled": True},
+                            "content": create_answer_from_tool(result),
                         }
                     ],
                 }
             )
 
             follow_up_response = self.generate_message(
-                messages=self.session_state.messages,
+                messages=session_state.messages,
                 max_tokens=2048,
             )
 
@@ -93,13 +126,13 @@ class ChatBot:
                 return f"An error occurred: {follow_up_response['error']}"
 
             response_text = follow_up_response.content[0].text
-            self.session_state.messages.append({"role": "assistant", "content": response_text})
-            return response_text
+            session_state.messages.append({"role": "assistant", "content": response_text})
+            return response_text, session_state
 
         elif response_message.content[0].type == "text":
             response_text = response_message.content[0].text
-            self.session_state.messages.append({"role": "assistant", "content": response_text})
-            return response_text
+            session_state.messages.append({"role": "assistant", "content": response_text})
+            return response_text, session_state
 
         else:
             raise Exception("An error occurred: Unexpected response type")
@@ -129,9 +162,17 @@ if __name__ == "__main__":
 
     st.session_state.messages = []
 
-    llm_client = ChatBot(st.session_state, config)
-    print(
-        llm_client.process_user_input(
-            " תמליץ על סדרת מתח טובה בנטפליקס, שביים יצחק קורניצ'קיו ומשחקים בו ג'וש רדנור וג'יימי פוקס"
-        )
+    llm_client = ChatBot(config)
+    txt, state = llm_client.process_user_input(
+        " תמליץ על סדרת אינטרקטיבית",
+        st.session_state,
     )
+    print("*" * 20)
+    print(txt)
+    print("*" * 20)
+    txt, state = llm_client.process_user_input(
+        "מה חשבו המבקרים על הסדרות האלה? איזה סדרה הם העדיפו יותר?",
+        state,
+    )
+    print("*" * 20)
+    print(txt)
