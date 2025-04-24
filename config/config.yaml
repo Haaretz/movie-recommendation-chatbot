@@ -2,6 +2,15 @@ filed_for_frontend:
   - article_id
   - article_name
   - writer_name
+  - review_type
+  - genre
+  - distribution_platform
+  - short_summary
+  - summary
+  - writer_name
+  - image_vertical
+  - author_image_square
+  - url
 
 return_fields:
   article_name: שם המאמר
