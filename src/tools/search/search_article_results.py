@@ -13,12 +13,10 @@ class SearchArticleResults:
     ) -> List[Dict[str, Any]]:
         """Extract payload and process points (either ScoredPoint or PointStruct), handling duplicates."""
         documents = []
-        ids = set()
         for point in points:
             payload = point.payload
-            if payload.get("id") not in ids:
-                article = {key: payload[key] for key in payload if key in self.return_fields_names}
-                if "publish_time" in article:
-                    article["publish_time"] = article["publish_time"].split("T")[0]
-                documents.append(article)
+            # article = {key: payload[key] for key in payload if key in self.return_fields_names}
+            if "publish_time" in payload:
+                payload["publish_time"] = payload["publish_time"].split("T")[0]
+            documents.append(payload)
         return documents
