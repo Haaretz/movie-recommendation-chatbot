@@ -12,14 +12,11 @@ filed_for_frontend:
   - author_image_square
   - url
 
-return_fields:
-  article_name: שם המאמר
-  article_id:  מזהה מאמר
-  writer_name:  שם הכותב/ת
-  publish_time: זמן פרסום
-  section_primary: מדור
-  text: כתבה
-
+filed_for_llm:
+  - article_name
+  - writer_name
+  - publish_time
+  - text
 
 
 bucket_name : ask_haaretz

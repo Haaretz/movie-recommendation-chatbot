@@ -1,10 +1,10 @@
 from google import genai
-from google.genai.types import Tool
+from google.genai.types import FunctionDeclaration, Tool
 
-get_articles = {
-    "name": "find_movie_tv_info_or_review",
-    "description": """
-    **Core Purpose:** Use this function to retrieve specific information, primarily **full review articles**, about movies or TV shows using a Retrieval-Augmented Generation (RAG) system, OR to provide recommendations.
+get_articles = FunctionDeclaration(
+    name="get_dataset_articles",
+    description="""
+    **Core Purpose:** Use this function to retrieve specific information, primarily **full review articles**, about movies or TV shows OR to provide recommendations.
 
     **Primary Triggers:**
 
@@ -13,24 +13,83 @@ get_articles = {
         *   Or if the user **describes the show/movie** using plot points, actors, director, setting, source material, festival context, etc. (e.g., "Looking for a review of that new movie from Haifa Festival about an alcoholic woman named Rona returning to Scotland", or "I want to read about the new Luca Guadagnino movie based on the Burroughs book").
         *   The function should be triggered to pass the user's query to the RAG system to find the relevant article.
 
-    2.  **Recommendations:** The user asks for suggestions on what to watch, potentially based on preferences, genres, or similarity to other titles (e.g., "Recommend a sci-fi series").
+    2.  **Providing Recommendations (General and Specific):** This function **must be used** whenever the user asks for suggestions on movies or TV shows to watch.
+        *   **Trigger Activation:** Activate this function for **all** recommendation requests, regardless of whether the user provides specific criteria (like genre - "thriller", "horror"; platform - "Yes Plus"; mood - "addictive", "really scary"; similarity to other titles) **or if they make a completely open-ended, general request** (e.g., "What should I watch?", "Recommend a good movie", "Looking for a binge-worthy series", "Seen anything good lately?").
+        *   **Function's Purpose:** The function is designed to provide informed recommendations by querying relevant data sources or performing targeted searches (e.g., using the RAG system) to find suitable viewing options—whether popular, highly-rated, or matching specific requirements (if provided).
+        *   **Example Triggers:** Trigger this function for inputs like: "Recommend a good thriller series on Yes Plus," "My friends and I want a scary horror movie," "Looking for an addictive series to binge," "Just give me a recommendation for a good movie."
+        *   **Important Constraint:** **Do not** simply provide a generic textual recommendation based on the model's internal knowledge. **Always invoke this function** for recommendation requests to ensure the suggestions are generated using the designated tool/data.
+
 
     3.  **Identification Leading to Information/Review:** The user is trying to remember/identify a show/movie by describing it. Trigger this function to use the description as a query, understanding the likely goal is to find the item *and then* potentially retrieve information or a review about it via the RAG system. (e.g., "What's that movie about...?").
 
     **Keywords/Phrases (Examples):** ביקורת (review), מאמר (article), כתבה (report/article), מידע על (information about), המלצה (recommendation), המלץ (recommend), הצע (suggest), מה לראות (what to watch), סרט (movie), סדרה (series), דומה ל (similar to), זיהוי (identify), לזהות (to identify), להיזכר (to remember), שם של (name of), למצוא את (find the), על (about), בכיכובו (starring), בימוי (directed by), מבוסס על (based on), ההוא עם (the one with...), מחפש (looking for), חיפוש (search for), מה השם של (what is the name of), פסטיבל (festival).
     """,
-    "parameters": {
+    parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
                 "description": "The user's request in Hebrew, containing either the criteria for recommendations OR the descriptive clues for identifying a specific movie/show. This should capture the essence of what they are looking for or trying to identify.",
             },
+            "streaming_platforms": {
+                "type": "array",
+                "description": "A list of streaming platforms the user is interested in (e.g., ['Netflix', 'Yes']). Optional; used to filter recommendations.",  # Updated description
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "Apple TV+",
+                        "Amazon Prime Video",
+                        "כאן 11",
+                        "HOT",
+                        "Yes",
+                        "Disney+",
+                        "Netflix",
+                        "קשת 12",
+                        "רשת 13",
+                    ],
+                },
+            },
+            "Genres": {
+                "type": "array",
+                "description": "A list of genres the user is interested in (e.g., ['comedy', 'drama']). Optional; used to filter recommendations.",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "דרמה",
+                        "קומדיה",
+                        "אקשן",
+                        "מותחן",
+                        "מדע בדיוני",
+                        "פנטזיה",
+                        "אימה",
+                        "רומנטיקה",
+                        "פשע",
+                        "דוקומנטרי",
+                        "ביוגרפיה",
+                        "היסטורי",
+                        "אנימציה",
+                        "ילדים ולכל המשפחה",
+                        "מוזיקלי",
+                        "סאטירה",
+                        "נוער והתבגרות",
+                        "משטרה ובלשים",
+                        "על־טבעי",
+                        "מלחמה",
+                        "ספורט",
+                        "ריאליטי",
+                        "קומיקס / גיבורי-על",
+                        "אירוח",
+                        "סטנד-אפ",
+                        "תוכנית אקטואליה",
+                        "לייף סטייל",
+                        "הרפתקאות",
+                    ],
+                },
+            },
         },
         "required": ["query"],
     },
-}
-
+)
 
 qdrant_tools = Tool(
     function_declarations=[

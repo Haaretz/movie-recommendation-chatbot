@@ -29,6 +29,7 @@ class LLMClient:
         self.api_key = api_key
         self.model_name = model_name
         self.filed_for_frontend = config.get("filed_for_frontend", {})
+        self.filed_for_llm = config.get("filed_for_llm", {})
 
         # --- LLM Initialization ---
         self.client = genai.Client(vertexai=False, api_key=api_key)
@@ -87,8 +88,9 @@ class LLMClient:
 
             logger.info(f"Processing function call: {call_name} with args: {call_args}")
 
-            if call_name == "find_movie_tv_info_or_review":
+            if call_name == "get_dataset_articles":
                 query = call_args.get("query")
+                streaming: str = call_args.get("streaming_platforms", None)
                 if not query:
                     logger.error(f"Missing 'query' argument for function call {call_name}")
                     parts.append(
@@ -100,7 +102,7 @@ class LLMClient:
                 else:
                     translated_query = self._translate_english_query(query)
                     try:
-                        search_results = self.search_article.retrieve_relevant_documents(translated_query)
+                        search_results = self.search_article.retrieve_relevant_documents(translated_query, streaming)
                         if len(search_results) == 0:
                             search_results = NO_RESULT
                             return search_results, ""
@@ -111,7 +113,9 @@ class LLMClient:
                             Part.from_function_response(
                                 name=call_name,
                                 response={
-                                    "content": search_results,
+                                    "content": [
+                                        {key: item[key] for key in self.filed_for_llm} for item in search_results
+                                    ],
                                 },
                             )
                         )
@@ -253,6 +257,7 @@ class LLMClient:
         self._save_message_to_redis(user_id, user_content)
 
         if current_turn_involved_function_call:
+            logger.info(f"Function call detected. Collected function calls: {collected_function_calls}")
             # Create an assistant message with embedded function call info
             assistant_content = Content(
                 role="model", parts=[Part(text=full_response_text, function_call=collected_function_calls[0])]
