@@ -90,7 +90,8 @@ class LLMClient:
 
             if call_name == "get_dataset_articles":
                 query = call_args.get("query")
-                streaming: str = call_args.get("streaming_platforms", None)
+                streaming: str = call_args.get("streaming_platforms", [])
+                genres: str = call_args.get("Genres", [])
                 if not query:
                     logger.error(f"Missing 'query' argument for function call {call_name}")
                     parts.append(
@@ -102,7 +103,9 @@ class LLMClient:
                 else:
                     translated_query = self._translate_english_query(query)
                     try:
-                        search_results = self.search_article.retrieve_relevant_documents(translated_query, streaming)
+                        search_results = self.search_article.retrieve_relevant_documents(
+                            translated_query, streaming, genres
+                        )
                         if len(search_results) == 0:
                             search_results = NO_RESULT
                             return search_results, ""
@@ -144,7 +147,7 @@ class LLMClient:
 
     def metadata_for_backend(self, metadata):
         # Filter metadata fields as defined in the configuration.
-        metadata = [{key: item[key] for key in self.filed_for_frontend} for item in metadata]
+        metadata = [{key: item.get(key, None) for key in self.filed_for_frontend} for item in metadata]
         return json.dumps(metadata, ensure_ascii=False)
 
     def _load_history_from_redis(self, user_id: str) -> List[Content]:
@@ -264,8 +267,8 @@ class LLMClient:
             )
             search_results = json.dumps(search_results, ensure_ascii=False)
             function_output_content = Content(role="model", parts=[Part(text=search_results)])
-            self._save_message_to_redis(user_id, assistant_content)
             self._save_message_to_redis(user_id, function_output_content)
+            self._save_message_to_redis(user_id, assistant_content)
         else:
             assistant_content = Content(role="model", parts=[Part(text=full_response_text)])
             self._save_message_to_redis(user_id, assistant_content)
@@ -285,6 +288,7 @@ async def main_cli():
 
     llm_client = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
     counter = np.random.randint(1, 99999)
+    # counter = 43
     while True:
         user_message = input("You: ")
         if user_message.lower() == "quit":

@@ -8,6 +8,7 @@ class SearchArticleFilters:
     def _create_qdrant_filter(
         self,
         streaming: list[str],
+        genres: list[str],
     ) -> models.Filter:
         must_conditions = []
 
@@ -15,6 +16,8 @@ class SearchArticleFilters:
             must_conditions.append(
                 models.FieldCondition(key="distribution_platform", match=models.MatchAny(any=streaming))
             )
+        if len(genres) > 0:
+            must_conditions.append(models.FieldCondition(key="genre", match=models.MatchAny(any=genres)))
 
         must_conditions.append(models.FieldCondition(key="create_by_AI", match=models.MatchValue(value=False)))
 
