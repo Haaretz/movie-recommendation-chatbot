@@ -11,15 +11,22 @@ from config.load_config import load_config
 from logger import logger
 from src.llm_api_client import LLMClient
 
-prompts = load_config("config/prompts.yaml")
-config = load_config("config/config.yaml")
-logger.info("Configuration files loaded successfully.")
 
-sys_instruct = prompts.get("system_instructions")
-api_key = config.get("llm", {}).get("GOOGLE_API_KEY")
-model_name = config.get("llm", {}).get("llm_model_name")
+def create_llm_client() -> LLMClient:
+    """
+    (Re)initialize the LLMClient with current config.
+    """
+    prompts = load_config("config/prompts.yaml")
+    config = load_config("config/config.yaml")
+    sys_instruct = prompts.get("system_instructions")
+    api_key = config.get("llm", {}).get("GOOGLE_API_KEY")
+    model_name = config.get("llm", {}).get("llm_model_name")
+    logger.info("Initializing LLMClient")
+    return LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
 
-llm_client_instance = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
+
+# Initialize the client once at startup
+llm_client_instance = create_llm_client()
 
 origins = [
     "https://localhost",
@@ -51,23 +58,40 @@ app.add_middleware(
 async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator[str, None]:
     """
     Asynchronous generator that yields chunks from the LLM's streaming response.
-    Handles function calls internally via the LLMClient.
+    If an error occurs, it will re-create the LLMClient and retry once.
     """
-    logger.info(f"Received streaming request: '{user_message}'")
+    global llm_client_instance
+
+    # First attempt
+    logger.info(f"Received streaming request: '{user_message}' for user {user_id}")
     txt = ""
-    async for chunk in llm_client_instance.streaming_message(user_message, user_id):
-        if isinstance(chunk, str):
+    try:
+        async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
             txt += chunk
-    logger.info(f"Final response: '{txt}'")
+        logger.info(f"Final response: '{txt}'")
+
+    except Exception as e:
+        # On failure, log, rebuild client, and retry one more time
+        logger.error(f"LLMClient error: {e}. Reinitializing client and retrying once.")
+        llm_client_instance = create_llm_client()
+
+        txt_retry = ""
+        async for chunk in llm_client_instance.streaming_message(user_message, user_id):
+            yield chunk
+            txt_retry += chunk
+        logger.info(f"Final response after retry: '{txt_retry}'")
 
 
 @app.post("/chat", response_class=StreamingResponse)
 async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
-
+    """
+    POST /chat
+    Streams back LLM responses as plain text.
+    """
     user_message = chat_message.message
     user_id = chat_message.user_id
-    logger.info(f"Received message from user {user_id}: '{user_message}'")
+
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -77,8 +101,8 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
 @app.get("/health")
 async def health_check():
     """
-    Simple health check endpoint.
-    Returns 'ok' if the service is running and the LLM client was initialized.
+    GET /health
+    Simple health check to verify the service and client are up.
     """
     if llm_client_instance:
         return {"status": "ok", "llm_client": "initialized"}
