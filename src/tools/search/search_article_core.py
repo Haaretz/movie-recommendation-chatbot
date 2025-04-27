@@ -31,7 +31,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
 
         self.qdrant_collection_name = config["qdrant"].get("qdrant_collection_name")
 
-    def retrieve_relevant_documents(self, query: str, streaming: list[str]) -> str:
+    def retrieve_relevant_documents(self, query: str, streaming: list[str], genres: list[str]) -> str:
         """
         Retrieve relevant documents from Qdrant using vector search and payload filters.
 
@@ -54,7 +54,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         logger.info(f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter(streaming)
+        qdrant_filter = self._create_qdrant_filter(streaming, genres)
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
@@ -85,5 +85,5 @@ if __name__ == "__main__":
 
     SA = SearchArticle(config)
 
-    result = SA.retrieve_relevant_documents(query="אנמציה")
+    result = SA.retrieve_relevant_documents(query="סרט שבע", streaming=[], genres=[])
     print(result)

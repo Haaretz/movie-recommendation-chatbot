@@ -1,7 +1,7 @@
 from google import genai
 from google.genai.types import FunctionDeclaration, Tool
 
-get_articles = FunctionDeclaration(
+get_articles = FunctionDeclaration(  # TODO: add output
     name="get_dataset_articles",
     description="""
     **Core Purpose:** Use this function to retrieve specific information, primarily **full review articles**, about movies or TV shows OR to provide recommendations.
@@ -21,6 +21,9 @@ get_articles = FunctionDeclaration(
 
 
     3.  **Identification Leading to Information/Review:** The user is trying to remember/identify a show/movie by describing it. Trigger this function to use the description as a query, understanding the likely goal is to find the item *and then* potentially retrieve information or a review about it via the RAG system. (e.g., "What's that movie about...?").
+
+    **Output**
+    The function output is a list of review articles that published in the Haaretz website, including the title, full text of the article, author and publication date.
 
     **Keywords/Phrases (Examples):** ביקורת (review), מאמר (article), כתבה (report/article), מידע על (information about), המלצה (recommendation), המלץ (recommend), הצע (suggest), מה לראות (what to watch), סרט (movie), סדרה (series), דומה ל (similar to), זיהוי (identify), לזהות (to identify), להיזכר (to remember), שם של (name of), למצוא את (find the), על (about), בכיכובו (starring), בימוי (directed by), מבוסס על (based on), ההוא עם (the one with...), מחפש (looking for), חיפוש (search for), מה השם של (what is the name of), פסטיבל (festival).
     """,
