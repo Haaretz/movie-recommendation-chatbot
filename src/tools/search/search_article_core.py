@@ -27,15 +27,11 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
             config["embedding"]["embedding_dimensionality"],
         )
         SearchArticleFilters.__init__(self)
-        SearchArticleResults.__init__(self, config["return_fields"], logger)
+        SearchArticleResults.__init__(self, logger)
 
         self.qdrant_collection_name = config["qdrant"].get("qdrant_collection_name")
-        self.translation_mapping = config["return_fields"]
 
-    def retrieve_relevant_documents(
-        self,
-        query: str,
-    ) -> str:
+    def retrieve_relevant_documents(self, query: str, streaming: list[str]) -> str:
         """
         Retrieve relevant documents from Qdrant using vector search and payload filters.
 
@@ -58,7 +54,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         logger.info(f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter()
+        qdrant_filter = self._create_qdrant_filter(streaming)
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
