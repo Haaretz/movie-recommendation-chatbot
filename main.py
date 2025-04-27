@@ -54,9 +54,12 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
     Handles function calls internally via the LLMClient.
     """
     logger.info(f"Received streaming request: '{user_message}'")
+    txt = ""
     async for chunk in llm_client_instance.streaming_message(user_message, user_id):
         if isinstance(chunk, str):
             yield chunk
+            txt += chunk
+    logger.info(f"Final response: '{txt}'")
 
 
 @app.post("/chat", response_class=StreamingResponse)
@@ -64,6 +67,7 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
 
     user_message = chat_message.message
     user_id = chat_message.user_id
+    logger.info(f"Received message from user {user_id}: '{user_message}'")
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
