@@ -110,6 +110,15 @@ async def health_check():
         raise HTTPException(status_code=503, detail={"status": "error", "llm_client": "not_initialized"})
 
 
+@app.get("/version")
+async def version():
+    """
+    GET /version
+    Returns the version of the API.
+    """
+    return {"version": "0.0.1"}
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logger.info(f"Starting Uvicorn server on port {port}")
