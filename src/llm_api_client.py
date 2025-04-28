@@ -91,8 +91,8 @@ class LLMClient:
                 query = call_args.get("query")
                 streaming: str = call_args.get("streaming_platforms", [])
                 genres: str = call_args.get("Genres", [])
-                _type: str = call_args.get("type", None)
-                logger.info(f"streaming: {streaming}, genres: {genres}, type: {_type}")
+                _type: str = call_args.get("media_type", None)
+                logger.info(f"streaming: {streaming}, genres: {genres}, media_type: {_type}")
                 if not query:
                     logger.error(f"Missing 'query' argument for function call {call_name}")
                     parts.append(
