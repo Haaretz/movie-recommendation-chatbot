@@ -89,6 +89,11 @@ get_articles = FunctionDeclaration(  # TODO: add output
                     ],
                 },
             },
+            "type": {
+                "type": "string",
+                "description": "The type of content the user is interested in (e.g., 'movie', 'series'). Optional; used to filter recommendations.",
+                "enum": ["Movie", "Series"],
+            },
         },
         "required": ["query"],
     },

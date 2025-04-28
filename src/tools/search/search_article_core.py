@@ -31,7 +31,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
 
         self.qdrant_collection_name = config["qdrant"].get("qdrant_collection_name")
 
-    def retrieve_relevant_documents(self, query: str, streaming: list[str], genres: list[str]) -> str:
+    def retrieve_relevant_documents(self, query: str, streaming: list[str], genres: list[str], review_type: str) -> str:
         """
         Retrieve relevant documents from Qdrant using vector search and payload filters.
 
@@ -54,7 +54,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         logger.info(f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter(streaming, genres)
+        qdrant_filter = self._create_qdrant_filter(streaming, genres, review_type)
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
