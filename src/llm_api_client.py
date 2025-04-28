@@ -52,7 +52,6 @@ class LLMClient:
                 tools=[qdrant_tools],
             ),
         )
-        logger.debug("Successfully created new chat session.")
         return chat
 
     def _translate_english_query(self, query: str):
@@ -86,12 +85,14 @@ class LLMClient:
             call_name = call.name
             call_args = call.args
 
-            logger.info(f"Processing function call: {call_name} with args: {call_args}")
+            logger.info(f"function call: {call_args}")
 
             if call_name == "get_dataset_articles":
                 query = call_args.get("query")
                 streaming: str = call_args.get("streaming_platforms", [])
                 genres: str = call_args.get("Genres", [])
+                _type: str = call_args.get("type", None)
+                logger.info(f"streaming: {streaming}, genres: {genres}, type: {_type}")
                 if not query:
                     logger.error(f"Missing 'query' argument for function call {call_name}")
                     parts.append(
@@ -104,7 +105,7 @@ class LLMClient:
                     translated_query = self._translate_english_query(query)
                     try:
                         search_results = self.search_article.retrieve_relevant_documents(
-                            translated_query, streaming, genres
+                            translated_query, streaming, genres, _type
                         )
                         if len(search_results) == 0:
                             search_results = NO_RESULT

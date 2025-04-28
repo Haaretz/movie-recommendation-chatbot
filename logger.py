@@ -9,7 +9,10 @@ logger_level = logging.DEBUG if os.environ.get("LOG_LEVEL", "debug") == "debug" 
 logger = logging.getLogger(f"{APP_NAME}_logger")
 logger.setLevel(logger_level)
 
-formatter = jsonlogger.JsonFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+formatter = jsonlogger.JsonFormatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    json_ensure_ascii=False,
+)
 
 
 # Create a stream handler (for stdout) and add it to the logger
