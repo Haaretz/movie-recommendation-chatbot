@@ -20,6 +20,9 @@ class SearchArticleFilters:
         if len(genres) > 0:
             must_conditions.append(models.FieldCondition(key="genre", match=models.MatchAny(any=genres)))
         if review_type:
+            replacements = {"movie": "Movie", "series": "Series"}
+            review_type = replacements.get(review_type, review_type)
+
             must_conditions.append(models.FieldCondition(key="review_type", match=models.MatchValue(value=review_type)))
 
         must_conditions.append(models.FieldCondition(key="create_by_AI", match=models.MatchValue(value=False)))

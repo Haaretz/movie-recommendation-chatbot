@@ -85,5 +85,10 @@ if __name__ == "__main__":
 
     SA = SearchArticle(config)
 
-    result = SA.retrieve_relevant_documents(query="סרט שבע", streaming=[], genres=[])
+    result = SA.retrieve_relevant_documents(
+        query="הסרט החדש של לוקה גואדנינו שמבוסס על ספר של בורוז על הומו שחי במקסיקו בשנות ה-50 ומחפש גברים צעירים",
+        streaming=[],
+        genres=[],
+        review_type="movie",
+    )
     print(result)
