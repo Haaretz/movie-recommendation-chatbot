@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, List, Optional
 
 import redis
 from google import genai
@@ -60,14 +60,12 @@ class LLMClient:
         """
         is_hebrew = any("\u0590" <= char <= "\u05FF" or "\uFB1D" <= char <= "\uFB4F" for char in query)
         if is_hebrew:
-            logger.debug("Query is likely Hebrew, returning original query.")
             return query
 
         translation_prompt = f"Translate the following English query to Hebrew: '{query}'. Return only the translation."
         response = self.client.models.generate_content(
             model=self.model_name,
             contents=translation_prompt,
-            config=genai.types.GenerateContentConfig(thinking_config=genai.types.ThinkingConfig(thinking_budget=1024)),
         )
         translated_query = response.text.strip()
         logger.debug(f"Translated query to Hebrew: '{translated_query}'")
@@ -93,60 +91,41 @@ class LLMClient:
                 genres: str = call_args.get("Genres", [])
                 _type: str = call_args.get("media_type", None)
                 logger.info(f"streaming: {streaming}, genres: {genres}, media_type: {_type}")
-                if not query:
-                    logger.error(f"Missing 'query' argument for function call {call_name}")
+
+                translated_query = self._translate_english_query(query)
+
+                search_results = self.search_article.retrieve_relevant_documents(
+                    translated_query, streaming, genres, _type
+                )
+                if len(search_results) == 0:
+                    search_results = NO_RESULT
                     parts.append(
                         Part.from_function_response(
                             name=call_name,
-                            response={"error": f"שגיאה: לא סופק 'query' לקריאה לפונקציה {call_name}."},
+                            response={
+                                "content": [
+                                    "No results found for the query: " + translated_query,
+                                ],
+                            },
                         )
                     )
                 else:
-                    translated_query = self._translate_english_query(query)
-                    try:
-                        search_results = self.search_article.retrieve_relevant_documents(
-                            translated_query, streaming, genres, _type
+                    parts.append(
+                        Part.from_function_response(
+                            name=call_name,
+                            response={
+                                "content": [{key: item[key] for key in self.filed_for_llm} for item in search_results],
+                            },
                         )
-                        if len(search_results) == 0:
-                            search_results = NO_RESULT
-                            return search_results, ""
-                        logger.info(
-                            f"Tool '{call_name}' executed successfully for query: '{translated_query}'. Results obtained."
-                        )
-                        parts.append(
-                            Part.from_function_response(
-                                name=call_name,
-                                response={
-                                    "content": [
-                                        {key: item[key] for key in self.filed_for_llm} for item in search_results
-                                    ],
-                                },
-                            )
-                        )
-                        processed_call_names.add(call_name)
-                        # Save the function call information into Redis
-                        self._save_function_call_to_redis(
-                            "123", {"name": call_name, "args": call_args, "translated_query": translated_query}
-                        )
-                    except Exception as e:
-                        logger.error(f"Error executing tool for function call {call_name}: {e}", exc_info=True)
-                        parts.append(
-                            Part.from_function_response(
-                                name=call_name,
-                                response={
-                                    "content": f"שגיאה בביצוע החיפוש עבור: '{translated_query}'. {str(e)}",
-                                },
-                            )
-                        )
-                        processed_call_names.add(call_name)
-            else:
-                logger.warning(f"Received unhandled function call: {call_name}")
+                    )
+                    processed_call_names.add(call_name)
 
         metadata = self.metadata_for_backend(search_results)
-        logger.info(f"Generated {len(parts)} function response parts.")
         return parts, metadata, search_results
 
     def metadata_for_backend(self, metadata):
+        if isinstance(metadata, str):
+            return None
         # Filter metadata fields as defined in the configuration.
         metadata = [{key: item.get(key, None) for key in self.filed_for_frontend} for item in metadata]
         return json.dumps(metadata, ensure_ascii=False)
@@ -176,15 +155,6 @@ class LLMClient:
         serialized = self._serialize_message(message)
         self.redis_client.rpush(key, serialized)
 
-    def _save_function_call_to_redis(self, user_id: str, function_call: Dict[str, Any]) -> None:
-        """
-        Saves function call information to Redis.
-        The function call is stored as a JSON message with role 'function'.
-        """
-        key = f"chat_history:{user_id}"
-        serialized = json.dumps({"role": "function", "function_call": function_call})
-        self.redis_client.rpush(key, serialized)
-
     def _serialize_message(self, message: Content) -> str:
         """
         Serializes a Content object into a JSON string.
@@ -212,15 +182,9 @@ class LLMClient:
         collected_function_calls: List[FunctionCall] = []
         current_turn_involved_function_call = False
 
-        # 1. Load history from Redis (each message is stored separately)
         loaded_history = self._load_history_from_redis(user_id)
-
-        # 2. Create a new chat session with the loaded history
         current_chat_session = self._create_chat_session(history=loaded_history)
-
-        full_response_text = ""  # To collect full text response from the assistant
-
-        # 3. Send the message using the chat session streaming
+        full_response_text = ""
         stream = current_chat_session.send_message_stream(message)
 
         for chunk in stream:
@@ -243,32 +207,30 @@ class LLMClient:
         if current_turn_involved_function_call:
             # Process the function call: execute tool and update with metadata
             function_response_parts, metadata, search_results = self._filter_fields_and_call_tool(
-                collected_function_calls
+                collected_function_calls,
             )
-            yield metadata
+            if metadata:
+                yield metadata
 
             response_stream_after_fc = current_chat_session.send_message_stream(function_response_parts)
-            try:
-                for final_chunk in response_stream_after_fc:
-                    if final_chunk.text:
-                        yield final_chunk.text
-                        full_response_text += final_chunk.text  # TODO: consider if need to save the output seaprately
-            except Exception as e:
-                logger.error(f"Error during function call response streaming: {e}", exc_info=True)
-                yield f"Error during function call response streaming: {e}"
+            for final_chunk in response_stream_after_fc:
+                if final_chunk.text:
+                    yield final_chunk.text
+                    full_response_text += final_chunk.text
+
         # 4. Create Content objects for the user message and the assistant's response
         user_content = Content(role="user", parts=[Part(text=message)])
         self._save_message_to_redis(user_id, user_content)
 
         if current_turn_involved_function_call:
-            logger.info(f"Function call detected. Collected function calls: {collected_function_calls}")
             # Create an assistant message with embedded function call info
-            assistant_content = Content(
-                role="model", parts=[Part(text=full_response_text, function_call=collected_function_calls[0])]
-            )
             search_results = json.dumps(search_results, ensure_ascii=False)
             function_output_content = Content(role="model", parts=[Part(text=search_results)])
             self._save_message_to_redis(user_id, function_output_content)
+
+            assistant_content = Content(
+                role="model", parts=[Part(text=full_response_text, function_call=collected_function_calls[0])]
+            )
             self._save_message_to_redis(user_id, assistant_content)
         else:
             assistant_content = Content(role="model", parts=[Part(text=full_response_text)])
