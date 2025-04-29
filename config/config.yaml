@@ -1,4 +1,4 @@
-filed_for_frontend:
+fields_for_frontend:
   - article_id
   - article_name
   - writer_name
@@ -12,7 +12,7 @@ filed_for_frontend:
   - author_image_square
   - url
 
-filed_for_llm:
+fields_for_llm:
   - article_name
   - writer_name
   - publish_time
