@@ -37,7 +37,7 @@ get_articles = FunctionDeclaration(
             },
             "media_type": {
                 "type": "string",
-                "description": "The type of content the user is interested in  (e.g., 'movie', 'series'). If the user clearly mentions whether they are asking about a 'movie' or a 'series' (for example, using words like 'סרט', 'סדרה', or describing a movie or series explicitly), fill this field accordingly. Use 'Movie' if the user refers to a film, and 'Series' if they refer to a TV show. Optional, If the type is not explicitly mentioned or cannot be reasonably inferred from the phrasing, leave this field empty",
+                "description": "The type of content the user is looking for (e.g., 'movie', 'series'). If the user clearly mentions whether they are asking about a 'movie' or a 'series' (for example, using words like 'סרט', 'סדרה', or describing a movie or series explicitly), fill this field accordingly. Use 'Movie' if the user refers to a film, and 'Series' if they refer to a TV show. Optional; used to filter recommendations",
                 "enum": ["movie", "series"],
             },
             "streaming_platforms": {

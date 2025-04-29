@@ -51,7 +51,6 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
         Returns:
             Formatted string of relevant documents. Returns NO_RESULT if no relevant documents found.
         """
-        logger.info(f"Retrieving relevant documents for query: '{query}'")
 
         query_embedding_vector = self.embed_query(query)
         qdrant_filter = self._create_qdrant_filter(streaming, genres, review_type)
@@ -64,7 +63,7 @@ class SearchArticle(QdrantClientManager, Embedding, SearchArticleFilters, Search
                 query_vector=query_embedding_vector,
                 limit=self.SEARCH_LIMIT,
                 # score_threshold=self.MIN_SCORE_THRESHOLD,
-                score_threshold=0.1,
+                score_threshold=0.6,
                 query_filter=qdrant_filter,
                 search_params=search_params,
             )
