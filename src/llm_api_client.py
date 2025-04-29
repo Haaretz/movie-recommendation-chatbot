@@ -1,50 +1,44 @@
 import json
-import os
 from typing import AsyncGenerator, List, Optional
 
-import redis
 from google import genai
 from google.genai import types
 from google.genai.types import Content, FunctionCall, Part
 
 from constant import NO_RESULT
 from logger import logger
+from src.redis_chat_history import RedisChatHistory
 from src.tools.import_tools import qdrant_tools
 from src.tools.search.search_article_core import SearchArticle
 
 
 class LLMClient:
-    def __init__(self, model_name: str, api_key: str, sys_instruct: str, config):
-        """
-        Initialize the LLMApiClient using the chat conversation API.
+    """High‑level wrapper around Gemini chat + article search with streaming I/O."""
 
-        Args:
-            model_name (str): The language model to use (e.g., "gemini-pro", "gemini-2.0-flash").
-            api_key (str): The API key for accessing the LLM service.
-            sys_instruct (str): System instructions.
-            config: Configuration data.
-        """
+    def __init__(
+        self,
+        model_name: str,
+        api_key: str,
+        sys_instruct: str,
+        config,
+        redis_store: RedisChatHistory,
+    ):
         self.search_article = SearchArticle(config)
         self.sys_instruct = sys_instruct
-        self.api_key = api_key
         self.model_name = model_name
-        self.filed_for_frontend = config.get("filed_for_frontend", {})
-        self.filed_for_llm = config.get("filed_for_llm", {})
+        self.fields_for_frontend = config.get("fields_for_frontend", {})
+        self.fields_for_llm = config.get("fields_for_llm", {})
+        self.redis = redis_store  # composition – dependency injection
 
         # --- LLM Initialization ---
         self.client = genai.Client(vertexai=False, api_key=api_key)
 
-        # --- Redis Initialization ---
-        redis_url = os.getenv("REDIS_URL")
-        self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
-        self.redis_client.ping()
-        logger.info("Successfully connected to Redis.")
+    # ---------------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------------
 
     def _create_chat_session(self, history: Optional[List[Content]] = None):
-        """
-        Creates a new chat session with the provided history.
-        """
-        chat = self.client.chats.create(
+        return self.client.chats.create(
             model=self.model_name,
             history=history,
             config=types.GenerateContentConfig(
@@ -52,191 +46,117 @@ class LLMClient:
                 tools=[qdrant_tools],
             ),
         )
-        return chat
 
     def _translate_english_query(self, query: str):
-        """
-        Translates an English query to Hebrew if needed.
-        """
-        is_hebrew = any("\u0590" <= char <= "\u05FF" or "\uFB1D" <= char <= "\uFB4F" for char in query)
+        is_hebrew = any("\u0590" <= ch <= "\u05FF" or "\uFB1D" <= ch <= "\uFB4F" for ch in query)
         if is_hebrew:
             return query
 
-        translation_prompt = f"Translate the following English query to Hebrew: '{query}'. Return only the translation."
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=translation_prompt,
-        )
-        translated_query = response.text.strip()
-        logger.debug(f"Translated query to Hebrew: '{translated_query}'")
-        return translated_query
+        prompt = f"Translate the following English query to Hebrew: '{query}'. Return only the translation."
+        resp = self.client.models.generate_content(model=self.model_name, contents=prompt)
+        translated = resp.text.strip()
+        logger.debug("Translated query to Hebrew: '%s'", translated)
+        return translated
 
     def _filter_fields_and_call_tool(self, function_calls):
-        """
-        Processes detected function calls, executes the tool, and returns response parts.
-        Also saves function call information to Redis.
-        """
         parts = []
-        processed_call_names = set()
-
         for call in function_calls:
-            call_name = call.name
-            call_args = call.args
+            if call.name != "get_dataset_articles":
+                continue
 
-            logger.info(f"function call: {call_args}")
+            args = call.args
+            query = args.get("query")
+            streaming = args.get("streaming_platforms", [])
+            genres = args.get("Genres", [])
+            media_type = args.get("media_type")
+            logger.info("streaming=%s, genres=%s, media_type=%s", streaming, genres, media_type)
 
-            if call_name == "get_dataset_articles":
-                query = call_args.get("query")
-                streaming: str = call_args.get("streaming_platforms", [])
-                genres: str = call_args.get("Genres", [])
-                _type: str = call_args.get("media_type", None)
-                logger.info(f"streaming: {streaming}, genres: {genres}, media_type: {_type}")
+            translated_query = self._translate_english_query(query)
+            search_results = self.search_article.retrieve_relevant_documents(
+                translated_query, streaming, genres, media_type
+            )
 
-                translated_query = self._translate_english_query(query)
-
-                search_results = self.search_article.retrieve_relevant_documents(
-                    translated_query, streaming, genres, _type
+            if not search_results:
+                search_results = NO_RESULT
+                parts.append(
+                    Part.from_function_response(
+                        name=call.name,
+                        response={"content": [f"No results found for the query: {translated_query}"]},
+                    )
                 )
-                if len(search_results) == 0:
-                    search_results = NO_RESULT
-                    parts.append(
-                        Part.from_function_response(
-                            name=call_name,
-                            response={
-                                "content": [
-                                    "No results found for the query: " + translated_query,
-                                ],
-                            },
-                        )
+            else:
+                parts.append(
+                    Part.from_function_response(
+                        name=call.name,
+                        response={
+                            "content": [{k: item.get(k) for k in self.fields_for_llm} for item in search_results]
+                        },
                     )
-                else:
-                    parts.append(
-                        Part.from_function_response(
-                            name=call_name,
-                            response={
-                                "content": [{key: item[key] for key in self.filed_for_llm} for item in search_results],
-                            },
-                        )
-                    )
-                    processed_call_names.add(call_name)
+                )
 
-        metadata = self.metadata_for_backend(search_results)
+        metadata = (
+            None
+            if isinstance(search_results, str)
+            else json.dumps(
+                [{k: it.get(k) for k in self.fields_for_frontend} for it in search_results],
+                ensure_ascii=False,
+            )
+        )
         return parts, metadata, search_results
 
-    def metadata_for_backend(self, metadata):
-        if isinstance(metadata, str):
-            return None
-        # Filter metadata fields as defined in the configuration.
-        metadata = [{key: item.get(key, None) for key in self.filed_for_frontend} for item in metadata]
-        return json.dumps(metadata, ensure_ascii=False)
-
-    def _load_history_from_redis(self, user_id: str) -> List[Content]:
-        """
-        Loads the chat history for a given user from Redis.
-        Uses a Redis list where each element is a JSON-encoded message.
-        """
-        key = f"chat_history:{user_id}"
-        # Retrieve all elements from the list
-        json_history_list = self.redis_client.lrange(key, 0, -1)
-        if json_history_list:
-            logger.debug(f"Loaded history for user {user_id} from Redis.")
-            # Deserialize each message into a Content object
-            return [self._deserialize_message(message_str) for message_str in json_history_list]
-        else:
-            logger.debug(f"No history found for user {user_id} in Redis.")
-            return []
-
-    def _save_message_to_redis(self, user_id: str, message: Content) -> None:
-        """
-        Saves a single chat message to Redis as a JSON-encoded string.
-        Appends the new message to the end of the Redis list.
-        """
-        key = f"chat_history:{user_id}"
-        serialized = self._serialize_message(message)
-        self.redis_client.rpush(key, serialized)
-
-    def _serialize_message(self, message: Content) -> str:
-        """
-        Serializes a Content object into a JSON string.
-        Only the 'role' and the text of each 'part' are stored.
-        """
-        return json.dumps(
-            {
-                "role": message.role,
-                "parts": [part.text for part in message.parts],
-            }
-        )
-
-    def _deserialize_message(self, message_str: str) -> Content:
-        """
-        Deserializes a JSON string into a Content object.
-        """
-        data = json.loads(message_str)
-        parts = [Part(text=part_text) for part_text in data.get("parts", [])]
-        return Content(role=data["role"], parts=parts)
+    # ---------------------------------------------------------------------
+    # Public API
+    # ---------------------------------------------------------------------
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
-        """
-        Sends a message, handles streaming response, processes function calls, and saves updated history in Redis.
-        """
-        collected_function_calls: List[FunctionCall] = []
-        current_turn_involved_function_call = False
+        collected_calls: List[FunctionCall] = []
+        involved_fc = False
 
-        loaded_history = self._load_history_from_redis(user_id)
-        current_chat_session = self._create_chat_session(history=loaded_history)
-        full_response_text = ""
-        stream = current_chat_session.send_message_stream(message)
+        history = self.redis.load_history(user_id)
+        chat = self._create_chat_session(history=history)
+        full_reply = ""
 
-        for chunk in stream:
+        for chunk in chat.send_message_stream(message):
             if chunk.text:
                 yield chunk.text
-                full_response_text += chunk.text
+                full_reply += chunk.text
             if (
                 chunk.candidates
                 and chunk.candidates[0].content
                 and chunk.candidates[0].content.parts
                 and isinstance(chunk.candidates[0].content.parts, list)
-                and len(chunk.candidates[0].content.parts) > 0
-                and chunk.candidates[0].content.parts[0]
-                and hasattr(chunk.candidates[0].content.parts[0], "function_call")
-                and chunk.candidates[0].content.parts[0].function_call
+                and chunk.candidates[0].content.parts
+                and getattr(chunk.candidates[0].content.parts[0], "function_call", None)
             ):
-                collected_function_calls.append(chunk.candidates[0].content.parts[0].function_call)
-                current_turn_involved_function_call = True
+                collected_calls.append(chunk.candidates[0].content.parts[0].function_call)
+                involved_fc = True
 
-        if current_turn_involved_function_call:
-            # Process the function call: execute tool and update with metadata
-            function_response_parts, metadata, search_results = self._filter_fields_and_call_tool(
-                collected_function_calls,
-            )
+        if involved_fc:
+            parts, metadata, search_results = self._filter_fields_and_call_tool(collected_calls)
             if metadata:
                 yield metadata
 
-            response_stream_after_fc = current_chat_session.send_message_stream(function_response_parts)
-            for final_chunk in response_stream_after_fc:
-                if final_chunk.text:
-                    yield final_chunk.text
-                    full_response_text += final_chunk.text
+            for chunk in chat.send_message_stream(parts):
+                if chunk.text:
+                    yield chunk.text
+                    full_reply += chunk.text
 
-        # 4. Create Content objects for the user message and the assistant's response
-        user_content = Content(role="user", parts=[Part(text=message)])
-        self._save_message_to_redis(user_id, user_content)
+        # Persist conversation
+        self.redis.save_message(user_id, Content(role="user", parts=[Part(text=message)]))
 
-        if current_turn_involved_function_call:
-            # Create an assistant message with embedded function call info
-            search_results = json.dumps(search_results, ensure_ascii=False)
-            function_output_content = Content(role="model", parts=[Part(text=search_results)])
-            self._save_message_to_redis(user_id, function_output_content)
-
-            assistant_content = Content(
-                role="model", parts=[Part(text=full_response_text, function_call=collected_function_calls[0])]
+        if involved_fc:
+            self.redis.save_message(
+                user_id, Content(role="model", parts=[Part(text=json.dumps(search_results, ensure_ascii=False))])
             )
-            self._save_message_to_redis(user_id, assistant_content)
+            assistant_msg = Content(role="model", parts=[Part(text=full_reply, function_call=collected_calls[0])])
         else:
-            assistant_content = Content(role="model", parts=[Part(text=full_response_text)])
-            self._save_message_to_redis(user_id, assistant_content)
+            assistant_msg = Content(role="model", parts=[Part(text=full_reply)])
+        self.redis.save_message(user_id, assistant_msg)
 
 
+# -------------------------------------------------------------------------
+# CLI (unchanged except for injecting RedisChatHistory)
+# -------------------------------------------------------------------------
 async def main_cli():
     import numpy as np
 
@@ -245,102 +165,34 @@ async def main_cli():
     prompts = load_config("config/prompts.yaml")
     sys_instruct = prompts.get("system_instructions")
     config = load_config("config/config.yaml")
-    llm_config = config.get("llm", {})
-    api_key = llm_config.get("GOOGLE_API_KEY")
-    model_name = llm_config.get("llm_model_name")
+    llm_cfg = config.get("llm", {})
 
-    llm_client = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
+    redis_store = RedisChatHistory()  # default to env var
+    llm_client = LLMClient(
+        model_name=llm_cfg.get("llm_model_name"),
+        api_key=llm_cfg.get("GOOGLE_API_KEY"),
+        sys_instruct=sys_instruct,
+        config=config,
+        redis_store=redis_store,
+    )
+
     counter = np.random.randint(1, 99999)
-    # counter = 43
     while True:
-        user_message = input("You: ")
-        if user_message.lower() == "quit":
+        user_msg = input("You: ")
+        if user_msg.lower() in {"quit", "exit"}:
             break
-        if user_message.lower() == "reset":
-            try:
-                llm_client.reset_chat_session()
-                print("--- Chat session reset ---")
-            except Exception as e:
-                print(f"\nError resetting chat session: {e}")
-                logger.error(f"Error during chat session reset: {e}", exc_info=True)
+        if user_msg.lower() == "reset":
+            # reset not implemented – placeholder for future
+            print("--- Chat session reset not implemented in refactor ---")
             continue
 
         print("LLM: ", end="", flush=True)
-        full_response = ""
-
-        async for chunk in llm_client.streaming_message(user_message, user_id=counter):
+        async for chunk in llm_client.streaming_message(user_msg, user_id=counter):
             print(chunk, end="", flush=True)
-            if chunk:
-                full_response += chunk
         print()
-
-
-# async def run_test():
-#     first_question_article = [
-#         {
-#             "article_id": "00000194-25d6-dcc4-a1d7-3df6703c0000",
-#             "question": "אני רוצה לקרוא ביקורת על הסרט החדש של לוקה גואדנינו, זה שמבוסס על ספר של בורוז על הומו שחי במקסיקו בשנות ה-50 ומחפש גברים צעירים.",
-#         },
-#         {
-#             "article_id": "00000194-2618-dd68-a3be-e6fc06680000",
-#             "question": 'אני מחפש ביקורת על הסרט החדש עם ניקול קידמן, זה שהיא משחקת בו מנכ"לית חברת רובוטיקה שיש לה רומן עם מתמחה צעיר. הסרט הוקרן בפסטיבל ונציה, איך הוא?.',
-#         },
-#         {
-#             "article_id": "00000194-2681-ddb6-afdd-77e781220000",
-#             "question": "אני מחפש ביקורת על הסרט החדש של עמוס גיתאי, זה שעוסק בשאלה למה יש מלחמות ומשתמש במכתבים של איינשטיין ופרויד.",
-#         },
-#         {
-#             "article_id": "00000194-2b97-d9c2-a79e-2bd7330c0000",
-#             "question": 'אפשר בבקשה ביקורת על הסרט החדש "נוספרטו" של רוברט אגרס? אני רוצה לדעת אם הוא נאמן למקורות של סרטי הערפדים הקלאסיים ואיך השחקנים הראשיים, במיוחד לילי-רוז דפ, משחקים?',
-#         },
-#         {
-#             "article_id": "00000194-319b-d555-abbc-b1dfdf250000",
-#             "question": '"אני מחפש ביקורת על סרט חדש שמוקרן בפסטיבל חיפה, על אישה אלכוהוליסטית בשם רונה שחוזרת לאי הולדתה בסקוטלנד כדי להתמודד עם ההתמכרות שלה. מישהי כתבה על זה ביקורת?',
-#         },
-#         {
-#             "article_id": "00000194-31db-ddaf-adb7-7bfbaf200000",
-#             "question": "אני מחפש סרט איראני חדש שמתרחש בטהרן ועוסק במשפחה שאבא שלה שופט ורואים בו גם קטעים מההפגנות שם. ראיתי שהקרינו אותו בפסטיבל חיפה",
-#         },
-#         {
-#             "article_id": "00000194-34df-d39d-a196-b7ff86ce0000",
-#             "question": '"אני מחפש סדרת אנימציה חדשה בנטפליקס, משהו בסגנון באפי קוטלת הערפדים אבל עם מיתולוגיה סינית. שמעתי שיש סדרה על נערה סינית-אמריקאית שנלחמת בשדים, מישהו מכיר?',
-#         },
-#         {
-#             "article_id": "00000194-356b-de88-a3dc-75ef26460000",
-#             "question": "אוקיי, שמעתי על סרט חדש של שבי גביזון עם ריצ'רד גיר על אבא שמגלה שהיה לו בן שנהרג. איך קוראים לסרט ומה הוא מספר עליו?",
-#         },
-#     ]
-#     from config.load_config import load_config
-
-#     prompts = load_config("config/prompts.yaml")
-#     sys_instruct = prompts.get("system_instructions")
-#     config = load_config("config/config.yaml")
-#     llm_config = config.get("llm", {})
-#     api_key = llm_config.get("GOOGLE_API_KEY")
-#     model_name = llm_config.get("llm_model_name")
-
-#     result = []
-#     import numpy as np
-
-#     counter = np.random.randint(1, 99999)
-
-#     llm_client = LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
-#     for q in first_question_article:
-#         article_id = q.get("article_id")
-#         question = q.get("question")
-#         print(f"Article ID: {article_id}")
-#         print(f"Question: {question}")
-#         full_response = ""
-#         async for chunk in llm_client.streaming_message(question, f"{counter}"):
-#             full_response += chunk
-#             print(chunk, end="", flush=True)
-#         counter += 1
-
-#         result.append({"article_id": article_id, "question": question, "answer": full_response})
 
 
 if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main_cli())
-    # asyncio.run(run_test())
