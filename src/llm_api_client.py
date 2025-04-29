@@ -33,10 +33,6 @@ class LLMClient:
         # --- LLM Initialization ---
         self.client = genai.Client(vertexai=False, api_key=api_key)
 
-    # ---------------------------------------------------------------------
-    # Internal helpers
-    # ---------------------------------------------------------------------
-
     def _create_chat_session(self, history: Optional[List[Content]] = None):
         return self.client.chats.create(
             model=self.model_name,
@@ -104,10 +100,6 @@ class LLMClient:
         )
         return parts, metadata, search_results
 
-    # ---------------------------------------------------------------------
-    # Public API
-    # ---------------------------------------------------------------------
-
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         collected_calls: List[FunctionCall] = []
         involved_fc = False
@@ -154,9 +146,6 @@ class LLMClient:
         self.redis.save_message(user_id, assistant_msg)
 
 
-# -------------------------------------------------------------------------
-# CLI (unchanged except for injecting RedisChatHistory)
-# -------------------------------------------------------------------------
 async def main_cli():
     import numpy as np
 
