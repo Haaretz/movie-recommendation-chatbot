@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from config.load_config import load_config
 from logger import logger
 from src.llm_api_client import LLMClient
+from src.redis_chat_history import RedisChatHistory
 
 
 def create_llm_client() -> LLMClient:
@@ -17,12 +18,18 @@ def create_llm_client() -> LLMClient:
     (Re)initialize the LLMClient with current config.
     """
     prompts = load_config("config/prompts.yaml")
-    config = load_config("config/config.yaml")
     sys_instruct = prompts.get("system_instructions")
-    api_key = config.get("llm", {}).get("GOOGLE_API_KEY")
-    model_name = config.get("llm", {}).get("llm_model_name")
-    logger.info("Initializing LLMClient")
-    return LLMClient(model_name=model_name, api_key=api_key, sys_instruct=sys_instruct, config=config)
+    config = load_config("config/config.yaml")
+    llm_cfg = config.get("llm", {})
+
+    redis_store = RedisChatHistory()
+    return LLMClient(
+        model_name=llm_cfg.get("llm_model_name"),
+        api_key=llm_cfg.get("GOOGLE_API_KEY"),
+        sys_instruct=sys_instruct,
+        config=config,
+        redis_store=redis_store,
+    )
 
 
 # Initialize the client once at startup
