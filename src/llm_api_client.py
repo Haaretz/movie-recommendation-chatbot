@@ -156,7 +156,7 @@ async def main_cli():
     config = load_config("config/config.yaml")
     llm_cfg = config.get("llm", {})
 
-    redis_store = RedisChatHistory()  # default to env var
+    redis_store = RedisChatHistory()
     llm_client = LLMClient(
         model_name=llm_cfg.get("llm_model_name"),
         api_key=llm_cfg.get("GOOGLE_API_KEY"),
