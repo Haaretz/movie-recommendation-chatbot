@@ -65,7 +65,7 @@ class LLMClient:
             streaming = args.get("streaming_platforms", [])
             genres = args.get("Genres", [])
             media_type = args.get("media_type")
-            logger.info("streaming=%s, genres=%s, media_type=%s", streaming, genres, media_type)
+            logger.info("query=%s, streaming=%s, genres=%s, media_type=%s", query, streaming, genres, media_type)
 
             translated_query = self._translate_english_query(query)
             search_results = self.search_article.retrieve_relevant_documents(
