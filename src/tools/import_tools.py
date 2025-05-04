@@ -20,6 +20,8 @@ get_articles = FunctionDeclaration(
 
     3.  **Identification Leading to Information/Review:** The user is trying to remember/identify a show/movie by describing it. Trigger this function to use the description as a query, understanding the likely goal is to find the item *and then* potentially retrieve information or a review about it via the RAG system. (e.g., "What's that movie about...?").
 
+    4. **Comparison between Titles:** The user is looking for a comparison between two or more titles, which may involve identifying similarities or differences. Run the function separately on each title.
+
     **Important Constraint:** **Do not** simply provide a generic textual recommendation based on the model's internal knowledge. **Always invoke this function** for recommendation requests to ensure the suggestions are generated using the designated tool/data.
 
 
