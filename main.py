@@ -30,8 +30,7 @@ def create_llm_client():
     # Initialize the tokenizer
     model_name = llm_cfg.get("llm_model_name")
     api_key = llm_cfg.get("GOOGLE_API_KEY")
-    client = genai.Client(vertexai=False, api_key=api_key)
-    tokenizer = client.models.load_tokenizer(model_name)
+    client = genai.Client()
 
     llm_client = LLMClient(
         model_name=model_name,
@@ -40,11 +39,11 @@ def create_llm_client():
         config=config,
         redis_store=redis_store,
     )
-    return llm_client, tokenizer
+    return llm_client, client
 
 
 # Initialize the client once at startup
-llm_client_instance, tokenizer = create_llm_client()
+llm_client_instance, client = create_llm_client()
 
 # Allowed CORS origins
 origins = [
@@ -83,7 +82,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
     Asynchronous generator that yields chunks from the LLM's streaming response.
     If an error occurs, it will re‑create the LLMClient and retry once.
     """
-    global llm_client_instance, tokenizer
+    global llm_client_instance, client
 
     logger.info(f"Received streaming request: '{user_message}' for user {user_id}")
     full_response = ""
@@ -97,7 +96,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
     except Exception as e:
         # Log error, rebuild client, and retry once
         logger.error(f"LLMClient error: {e}. Reinitializing client and retrying once.")
-        llm_client_instance, tokenizer = create_llm_client()
+        llm_client_instance, client = create_llm_client()
 
         full_response_retry = ""
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
@@ -119,7 +118,7 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     # Token limit check (hard limit: 150 tokens)
-    token_count = len(tokenizer.tokenize(user_message))
+    token_count = client.models.count_tokens(model="gemini-2.0-flash", contents=user_message).total_tokens
     if token_count > 150:
         raise HTTPException(
             status_code=413,
