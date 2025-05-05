@@ -14,7 +14,7 @@ from src.llm_api_client import LLMClient
 from src.redis_chat_history import RedisChatHistory
 
 
-def create_llm_client() -> tuple[LLMClient, genai.tokenizer.Tokenizer]:
+def create_llm_client():
     """
     (Re)initialize the LLMClient with current config and return it
     together with its tokenizer.
