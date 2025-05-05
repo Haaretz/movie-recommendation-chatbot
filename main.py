@@ -1,3 +1,8 @@
+"""
+Full FastAPI server file – revised so the model name used for
+`count_tokens()` comes from configuration instead of being hard‑coded.
+"""
+
 import os
 from typing import AsyncGenerator
 
@@ -14,10 +19,13 @@ from src.llm_api_client import LLMClient
 from src.redis_chat_history import RedisChatHistory
 
 
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
 def create_llm_client():
     """
     (Re)initialize the LLMClient with current config and return it
-    together with its tokenizer.
+    together with its genai client.
     """
     prompts = load_config("config/prompts.yaml")
     sys_instruct = prompts.get("system_instructions")
@@ -27,11 +35,14 @@ def create_llm_client():
 
     redis_store = RedisChatHistory()
 
-    # Initialize the tokenizer
+    # Grab the model name and API key from config
     model_name = llm_cfg.get("llm_model_name")
     api_key = llm_cfg.get("GOOGLE_API_KEY")
+
+    # Initialise Google genai client
     client = genai.Client()
 
+    # Construct our wrapper client
     llm_client = LLMClient(
         model_name=model_name,
         api_key=api_key,
@@ -42,10 +53,14 @@ def create_llm_client():
     return llm_client, client
 
 
-# Initialize the client once at startup
+# --------------------------------------------------------------------------- #
+# One global instance, created at startup
+# --------------------------------------------------------------------------- #
 llm_client_instance, client = create_llm_client()
 
-# Allowed CORS origins
+# --------------------------------------------------------------------------- #
+# FastAPI setup
+# --------------------------------------------------------------------------- #
 origins = [
     "https://localhost",
     "https://localhost.haaretz.co.il",
@@ -56,7 +71,7 @@ origins = [
 
 
 class ChatMessage(BaseModel):
-    """Single chat message from the client"""
+    """Schema for a single chat message arriving from the front‑end."""
 
     message: str
     user_id: str
@@ -77,39 +92,44 @@ app.add_middleware(
 )
 
 
+# --------------------------------------------------------------------------- #
+# Streaming helper
+# --------------------------------------------------------------------------- #
 async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator[str, None]:
     """
-    Asynchronous generator that yields chunks from the LLM's streaming response.
-    If an error occurs, it will re‑create the LLMClient and retry once.
+    Yield chunks of the LLM streaming response.
+    If an error occurs, rebuild the client once and retry.
     """
     global llm_client_instance, client
 
-    logger.info(f"Received streaming request: '{user_message}' for user {user_id}")
+    logger.info("Received streaming request: '%s' for user %s", user_message, user_id)
     full_response = ""
 
     try:
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
             full_response += chunk
-        logger.info(f"Final response: '{full_response}'")
+        logger.info("Final response: '%s'", full_response)
 
     except Exception as e:
-        # Log error, rebuild client, and retry once
-        logger.error(f"LLMClient error: {e}. Reinitializing client and retrying once.")
+        logger.error("LLMClient error: %s. Reinitializing client and retrying once.", e)
         llm_client_instance, client = create_llm_client()
 
         full_response_retry = ""
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
             full_response_retry += chunk
-        logger.info(f"Final response after retry: '{full_response_retry}'")
+        logger.info("Final response after retry: '%s'", full_response_retry)
 
 
+# --------------------------------------------------------------------------- #
+# Routes
+# --------------------------------------------------------------------------- #
 @app.post("/chat", response_class=StreamingResponse)
 async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     """
     POST /chat
-    Validate the request and stream back LLM responses as plain text.
+    Validate the request and stream LLM responses in plain text.
     """
     user_message = chat_message.message
     user_id = chat_message.user_id
@@ -117,39 +137,50 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    # ----------------------------------------------------------------------- #
+    # Use the model name from our client instead of hard‑coding it
+    # ----------------------------------------------------------------------- #
+    model_for_count = llm_client_instance.model_name
+
     # Token limit check (hard limit: 150 tokens)
-    token_count = client.models.count_tokens(model="gemini-2.0-flash", contents=user_message).total_tokens
+    token_count = client.models.count_tokens(model=model_for_count, contents=user_message).total_tokens
+
     if token_count > 150:
         raise HTTPException(
             status_code=413,
             detail=f"Message too long ({token_count} tokens). Maximum is 150.",
         )
 
-    return StreamingResponse(stream_llm_response(user_message, user_id), media_type="text/plain")
+    return StreamingResponse(
+        stream_llm_response(user_message, user_id),
+        media_type="text/plain",
+    )
 
 
 @app.get("/health")
 async def health_check():
     """
     GET /health
-    Simple health check to verify the service and client are up.
+    Basic health check to verify the service and client are up.
     """
     if llm_client_instance:
         return {"status": "ok", "llm_client": "initialized"}
-    else:
-        raise HTTPException(status_code=503, detail={"status": "error", "llm_client": "not_initialized"})
+    raise HTTPException(status_code=503, detail={"status": "error", "llm_client": "not_initialized"})
 
 
 @app.get("/version")
 async def version():
     """
     GET /version
-    Returns the version of the API.
+    Returns the API version.
     """
     return {"version": "0.0.1"}
 
 
+# --------------------------------------------------------------------------- #
+# Entry‑point when running as a script
+# --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    logger.info(f"Starting Uvicorn server on port {port}")
+    logger.info("Starting Uvicorn server on port %s", port)
     uvicorn.run(app, host="0.0.0.0", port=port)

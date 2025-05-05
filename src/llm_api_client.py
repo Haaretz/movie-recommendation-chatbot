@@ -33,8 +33,6 @@ class LLMClient:
         # --- LLM Initialization ---
         self.client = genai.Client(vertexai=False, api_key=api_key)
 
-        # self.tokenizer = self.client.models.load_tokenizer(model_name)
-
     def _create_chat_session(self, history: Optional[List[Content]] = None):
         return self.client.chats.create(
             model=self.model_name,
@@ -102,18 +100,40 @@ class LLMClient:
         )
         return parts, metadata, search_results
 
-    def num_tokens(self, history, output) -> tuple[int, int]:
+    def num_tokens(
+        self,
+        history: List[Content],
+        new_user_msg: str,
+        assistant_reply: str,
+    ) -> tuple[int, int]:
         """
-        Estimate the number of tokens in and out the LLM.
-        """
-        input_tokens = 0
+        Return (input_tokens, output_tokens) for the *entire* turn.
+        Includes: prior history  + current user   + optional function‑call parts.
+        Output is the assistant reply text only (function‑call output is
+        already counted on the *input* side because it goes *into* the model).
 
+        All counting is done with the model's tokenizer via
+        `client.models.count_tokens`.
+        """
+
+        def _count(text: str) -> int:
+            return self.client.models.count_tokens(model=self.model_name, contents=text).total_tokens
+
+        # --- INPUT ---
+        total_in = 0
         for content in history:
-            if content.role == "user" or content.role == "model":
-                input_tokens += len(self.tokenizer.tokenize(content.text))
+            if content.role in {"user", "model"}:
+                if content.parts[0].text:
+                    total_in += _count(content.parts[0].text)
+                elif content.parts[0].function_response:
+                    total_in += _count(json.dumps(content.parts[0].function_response.response))
 
-        output_tokens = len(self.tokenizer.tokenize(output))
-        return input_tokens, output_tokens
+        total_in += _count(new_user_msg)  # current user text
+
+        # --- OUTPUT ---
+        total_out = _count(assistant_reply)  # assistant free‑form text
+
+        return total_in, total_out
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         collected_calls: List[FunctionCall] = []
@@ -123,42 +143,71 @@ class LLMClient:
         chat = self._create_chat_session(history=history)
         full_reply = ""
 
+        # --- send user message to LLM, collect function calls if any ---
         for chunk in chat.send_message_stream(message):
             if chunk.text:
                 yield chunk.text
                 full_reply += chunk.text
-            if (
+            func_call = (
                 chunk.candidates
                 and chunk.candidates[0].content
                 and chunk.candidates[0].content.parts
-                and isinstance(chunk.candidates[0].content.parts, list)
-                and chunk.candidates[0].content.parts
                 and getattr(chunk.candidates[0].content.parts[0], "function_call", None)
-            ):
-                collected_calls.append(chunk.candidates[0].content.parts[0].function_call)
+            )
+            if func_call:
+                collected_calls.append(func_call)
                 involved_fc = True
 
+        # --- if we did call a tool, filter & run it ---
         if involved_fc:
             parts, metadata, search_results = self._filter_fields_and_call_tool(collected_calls)
+
+            # 1) Log the full raw results for your cost/audit logs
+            logger.debug(
+                "Raw search_results for cost tracking: %s",
+                json.dumps(search_results, ensure_ascii=False),
+            )
+
+            # 2) Yield frontend‐metadata if needed
             if metadata:
                 yield metadata
 
+            # 3) Stream the LLM’s follow-up (using only the minimal `parts`)
             for chunk in chat.send_message_stream(parts):
                 if chunk.text:
                     yield chunk.text
                     full_reply += chunk.text
 
-        # Persist conversation
+        # --- Persist conversation into Redis, but only minimal parts in history ---
+        # Save the user’s message
         self.redis.save_message(user_id, Content(role="user", parts=[Part(text=message)]))
 
         if involved_fc:
-            self.redis.save_message(
-                user_id, Content(role="model", parts=[Part(text=json.dumps(search_results, ensure_ascii=False))])
-            )
-            assistant_msg = Content(role="model", parts=[Part(text=full_reply, function_call=collected_calls[0])])
+            # Save only the function-response parts (fields_for_llm)
+            self.redis.save_message(user_id, Content(role="model", parts=parts))
+
+            # Then save the assistant’s natural-language reply
+            assistant_msg = Content(role="model", parts=[Part(text=full_reply)])
         else:
             assistant_msg = Content(role="model", parts=[Part(text=full_reply)])
+
         self.redis.save_message(user_id, assistant_msg)
+
+        # --- Finally, do your token counting as before, which now
+        # will reflect only what the model actually saw ---
+        prior_history = history + [Content(role="user", parts=[Part(text=message)])]
+        prior_history = prior_history + [Content(role="model", parts=parts)] if involved_fc else prior_history
+        token_in, token_out = self.num_tokens(prior_history, new_user_msg=message, assistant_reply=full_reply)
+        logs = {
+            "version": "1.0",
+            "model": self.model_name,
+            "user_id": user_id,
+            "input_tokens": token_in,
+            "output_tokens": token_out,
+            "rag_speed": 0,
+            "llm_speed": 0,
+        }
+        yield json.dumps(logs, ensure_ascii=False)
 
 
 async def main_cli():
