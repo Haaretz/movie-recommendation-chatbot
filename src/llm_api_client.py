@@ -1,4 +1,5 @@
 import json
+import time
 from typing import AsyncGenerator, List, Optional
 
 from google import genai
@@ -143,7 +144,10 @@ class LLMClient:
         chat = self._create_chat_session(history=history)
         full_reply = ""
 
+        total_start = time.time()
+
         # --- send user message to LLM, collect function calls if any ---
+        llm_start = time.time()
         for chunk in chat.send_message_stream(message):
             if chunk.text:
                 yield chunk.text
@@ -158,9 +162,14 @@ class LLMClient:
                 collected_calls.append(func_call)
                 involved_fc = True
 
+        llm_end = time.time()
+        llm_initial_duration = llm_end - llm_start
+
         # --- if we did call a tool, filter & run it ---
         if involved_fc:
+            rag_start = time.time()
             parts, metadata, search_results = self._filter_fields_and_call_tool(collected_calls)
+            rag_duration = time.time() - rag_start
 
             # 1) Log the full raw results for your cost/audit logs
             logger.debug(
@@ -173,10 +182,14 @@ class LLMClient:
                 yield metadata
 
             # 3) Stream the LLM’s follow-up (using only the minimal `parts`)
+            llm_followup_start = time.time()
             for chunk in chat.send_message_stream(parts):
                 if chunk.text:
                     yield chunk.text
                     full_reply += chunk.text
+
+            llm_followup_end = time.time()
+            llm_followup_duration = llm_followup_end - llm_followup_start
 
         # --- Persist conversation into Redis, but only minimal parts in history ---
         # Save the user’s message
@@ -193,8 +206,9 @@ class LLMClient:
 
         self.redis.save_message(user_id, assistant_msg)
 
-        # --- Finally, do your token counting as before, which now
-        # will reflect only what the model actually saw ---
+        total_end = time.time()
+        total_duration = total_end - total_start
+
         prior_history = history + [Content(role="user", parts=[Part(text=message)])]
         prior_history = prior_history + [Content(role="model", parts=parts)] if involved_fc else prior_history
         token_in, token_out = self.num_tokens(prior_history, new_user_msg=message, assistant_reply=full_reply)
@@ -204,8 +218,9 @@ class LLMClient:
             "user_id": user_id,
             "input_tokens": token_in,
             "output_tokens": token_out,
-            "rag_speed": 0,
-            "llm_speed": 0,
+            "rag_speed": rag_duration if involved_fc else 0,
+            "llm_speed": (llm_initial_duration + (llm_followup_duration if involved_fc else 0)),
+            "total_time": total_duration,
         }
         yield json.dumps(logs, ensure_ascii=False)
 
