@@ -5,6 +5,7 @@ import uvicorn
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from google import genai
 from pydantic import BaseModel
 
 from config.load_config import load_config
@@ -13,28 +14,39 @@ from src.llm_api_client import LLMClient
 from src.redis_chat_history import RedisChatHistory
 
 
-def create_llm_client() -> LLMClient:
+def create_llm_client() -> tuple[LLMClient, genai.tokenizer.Tokenizer]:
     """
-    (Re)initialize the LLMClient with current config.
+    (Re)initialize the LLMClient with current config and return it
+    together with its tokenizer.
     """
     prompts = load_config("config/prompts.yaml")
     sys_instruct = prompts.get("system_instructions")
+
     config = load_config("config/config.yaml")
     llm_cfg = config.get("llm", {})
 
     redis_store = RedisChatHistory()
-    return LLMClient(
-        model_name=llm_cfg.get("llm_model_name"),
-        api_key=llm_cfg.get("GOOGLE_API_KEY"),
+
+    # Initialize the tokenizer
+    model_name = llm_cfg.get("llm_model_name")
+    api_key = llm_cfg.get("GOOGLE_API_KEY")
+    client = genai.Client(vertexai=False, api_key=api_key)
+    tokenizer = client.models.load_tokenizer(model_name)
+
+    llm_client = LLMClient(
+        model_name=model_name,
+        api_key=api_key,
         sys_instruct=sys_instruct,
         config=config,
         redis_store=redis_store,
     )
+    return llm_client, tokenizer
 
 
 # Initialize the client once at startup
-llm_client_instance = create_llm_client()
+llm_client_instance, tokenizer = create_llm_client()
 
+# Allowed CORS origins
 origins = [
     "https://localhost",
     "https://localhost.haaretz.co.il",
@@ -45,12 +57,16 @@ origins = [
 
 
 class ChatMessage(BaseModel):
+    """Single chat message from the client"""
+
     message: str
     user_id: str
 
 
 app = FastAPI(
-    title="LLM Streaming Chat API", description="API for interacting with the LLM via streaming.", version="1.0.0"
+    title="LLM Streaming Chat API",
+    description="API for interacting with the LLM via streaming.",
+    version="1.0.0",
 )
 
 app.add_middleware(
@@ -65,42 +81,50 @@ app.add_middleware(
 async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator[str, None]:
     """
     Asynchronous generator that yields chunks from the LLM's streaming response.
-    If an error occurs, it will re-create the LLMClient and retry once.
+    If an error occurs, it will re‑create the LLMClient and retry once.
     """
-    global llm_client_instance
+    global llm_client_instance, tokenizer
 
-    # First attempt
     logger.info(f"Received streaming request: '{user_message}' for user {user_id}")
-    txt = ""
+    full_response = ""
+
     try:
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
-            txt += chunk
-        logger.info(f"Final response: '{txt}'")
+            full_response += chunk
+        logger.info(f"Final response: '{full_response}'")
 
     except Exception as e:
-        # On failure, log, rebuild client, and retry one more time
+        # Log error, rebuild client, and retry once
         logger.error(f"LLMClient error: {e}. Reinitializing client and retrying once.")
-        llm_client_instance = create_llm_client()
+        llm_client_instance, tokenizer = create_llm_client()
 
-        txt_retry = ""
+        full_response_retry = ""
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
-            txt_retry += chunk
-        logger.info(f"Final response after retry: '{txt_retry}'")
+            full_response_retry += chunk
+        logger.info(f"Final response after retry: '{full_response_retry}'")
 
 
 @app.post("/chat", response_class=StreamingResponse)
 async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     """
     POST /chat
-    Streams back LLM responses as plain text.
+    Validate the request and stream back LLM responses as plain text.
     """
     user_message = chat_message.message
     user_id = chat_message.user_id
 
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    # Token limit check (hard limit: 150 tokens)
+    token_count = len(tokenizer.tokenize(user_message))
+    if token_count > 150:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Message too long ({token_count} tokens). Maximum is 150.",
+        )
 
     return StreamingResponse(stream_llm_response(user_message, user_id), media_type="text/plain")
 
