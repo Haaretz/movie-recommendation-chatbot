@@ -33,7 +33,7 @@ class LLMClient:
         # --- LLM Initialization ---
         self.client = genai.Client(vertexai=False, api_key=api_key)
 
-        self.tokenizer = self.client.models.load_tokenizer(model_name)
+        # self.tokenizer = self.client.models.load_tokenizer(model_name)
 
     def _create_chat_session(self, history: Optional[List[Content]] = None):
         return self.client.chats.create(
