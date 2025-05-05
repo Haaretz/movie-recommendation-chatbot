@@ -33,6 +33,8 @@ class LLMClient:
         # --- LLM Initialization ---
         self.client = genai.Client(vertexai=False, api_key=api_key)
 
+        self.tokenizer = self.client.models.load_tokenizer(model_name)
+
     def _create_chat_session(self, history: Optional[List[Content]] = None):
         return self.client.chats.create(
             model=self.model_name,
@@ -99,6 +101,19 @@ class LLMClient:
             )
         )
         return parts, metadata, search_results
+
+    def num_tokens(self, history, output) -> tuple[int, int]:
+        """
+        Estimate the number of tokens in and out the LLM.
+        """
+        input_tokens = 0
+
+        for content in history:
+            if content.role == "user" or content.role == "model":
+                input_tokens += len(self.tokenizer.tokenize(content.text))
+
+        output_tokens = len(self.tokenizer.tokenize(output))
+        return input_tokens, output_tokens
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         collected_calls: List[FunctionCall] = []
