@@ -245,16 +245,17 @@ class LLMClient:
 
         troll_triggered = any(call.name == "trigger_troll_response" for call in collected_calls)
         logs = {
-            "additional_info": "logs",
-            "version": "1.0",
-            "model": self.model_name,
-            "user_id": user_id,
-            "input_tokens": token_in,
-            "output_tokens": token_out,
-            "rag_speed": rag_duration if involved_fc else 0,
-            "llm_speed": (llm_initial_duration + (llm_followup_duration if involved_fc else 0)),
-            "troll_triggered": troll_triggered,
-            "total_time": total_duration,
+            "additional_info": {
+                "version": "1.0",
+                "model": self.model_name,
+                "user_id": user_id,
+                "input_tokens": token_in,
+                "output_tokens": token_out,
+                "rag_speed": rag_duration if involved_fc else 0,
+                "llm_speed": (llm_initial_duration + (llm_followup_duration if involved_fc else 0)),
+                "troll_triggered": troll_triggered,
+                "total_time": total_duration,
+            }
         }
         yield json.dumps(logs, ensure_ascii=False)
 
