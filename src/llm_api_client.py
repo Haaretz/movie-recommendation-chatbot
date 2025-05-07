@@ -245,6 +245,7 @@ class LLMClient:
 
         troll_triggered = any(call.name == "trigger_troll_response" for call in collected_calls)
         logs = {
+            "additional_info": "logs",
             "version": "1.0",
             "model": self.model_name,
             "user_id": user_id,
