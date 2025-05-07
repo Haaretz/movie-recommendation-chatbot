@@ -102,9 +102,16 @@ get_articles = FunctionDeclaration(
     },
 )
 
+troll = FunctionDeclaration(
+    name="trigger_troll_response",
+    description="This function is triggered when the assistant detects trolling or provocative. It responds with a playful and humorous recommendation for the animated movie 'Trolls' as a gentle way to redirect the conversation. This function helps maintain a friendly tone while steering the interaction back to the assistant's domain of recommending TV shows and movies.",
+    parameters={"type": "object", "properties": {}},
+)
+
 qdrant_tools = Tool(
     function_declarations=[
         get_articles,
+        troll,
     ],
 )
 

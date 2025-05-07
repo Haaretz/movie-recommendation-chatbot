@@ -11,6 +11,7 @@ fields_for_frontend:
   - image_vertical
   - author_image_square
   - url
+  - name
 
 fields_for_llm:
   - article_name

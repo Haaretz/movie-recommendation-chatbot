@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 from google.genai.types import Content, FunctionCall, Part
 
-from constant import NO_RESULT
+from constant import NO_RESULT, TROLL
 from logger import logger
 from src.redis_chat_history import RedisChatHistory
 from src.tools.import_tools import qdrant_tools
@@ -56,50 +56,80 @@ class LLMClient:
         return translated
 
     def _filter_fields_and_call_tool(self, function_calls):
+        """
+        Process function calls, route to appropriate handlers, and return
+        the response parts, frontend metadata, and raw search results.
+        """
         parts = []
+        search_results = None
+
         for call in function_calls:
-            if call.name != "get_dataset_articles":
-                continue
-
-            args = call.args
-            query = args.get("query")
-            streaming = args.get("streaming_platforms", [])
-            genres = args.get("Genres", [])
-            media_type = args.get("media_type")
-            logger.info("query=%s, streaming=%s, genres=%s, media_type=%s", query, streaming, genres, media_type)
-
-            translated_query = self._translate_english_query(query)
-            search_results = self.search_article.retrieve_relevant_documents(
-                translated_query, streaming, genres, media_type
-            )
-
-            if not search_results:
-                search_results = NO_RESULT
-                parts.append(
-                    Part.from_function_response(
-                        name=call.name,
-                        response={"content": [f"No results found for the query: {translated_query}"]},
-                    )
-                )
+            if call.name == "get_dataset_articles":
+                handler_parts, search_results = self._handle_get_dataset_articles(call)
+                parts.extend(handler_parts)
+            elif call.name == "trigger_troll_response":
+                handler_parts, search_results = self._handle_trigger_troll_response(call)
+                parts.extend(handler_parts)
             else:
-                parts.append(
-                    Part.from_function_response(
-                        name=call.name,
-                        response={
-                            "content": [{k: item.get(k) for k in self.fields_for_llm} for item in search_results]
-                        },
-                    )
-                )
+                logger.warning(f"No handler registered for function '{call.name}'")
 
-        metadata = (
-            None
-            if isinstance(search_results, str)
-            else json.dumps(
-                [{k: it.get(k) for k in self.fields_for_frontend} for it in search_results],
+        # Prepare metadata for frontend if we have list results
+        metadata = None
+        if isinstance(search_results, list):
+            metadata = json.dumps(
+                [{k: item.get(k, None) for k in self.fields_for_frontend} for item in search_results],
                 ensure_ascii=False,
             )
-        )
+
         return parts, metadata, search_results
+
+    def _handle_get_dataset_articles(self, call):
+        """
+        Handle 'get_dataset_articles' calls by performing the search and
+        formatting the response part.
+        """
+        args = call.args
+        query = args.get("query")
+        streaming = args.get("streaming_platforms", [])
+        genres = args.get("Genres", [])
+        media_type = args.get("media_type")
+
+        logger.info(
+            "Executing get_dataset_articles with query=%s, streaming=%s, genres=%s, media_type=%s",
+            query,
+            streaming,
+            genres,
+            media_type,
+        )
+
+        translated_query = self._translate_english_query(query)
+        search_results = self.search_article.retrieve_relevant_documents(
+            translated_query, streaming, genres, media_type
+        )
+
+        if not search_results:
+            # No results found, return a placeholder response
+            part = Part.from_function_response(
+                name=call.name,
+                response={"content": [f"No results found for the query: {translated_query}"]},
+            )
+            return [part], NO_RESULT
+
+        # Convert results for LLM
+        content_list = [{k: item.get(k) for k in self.fields_for_llm} for item in search_results]
+        part = Part.from_function_response(name=call.name, response={"content": content_list})
+        return [part], search_results
+
+    def _handle_trigger_troll_response(self, call):
+        """
+        Handle 'trigger_troll_response' calls by returning predefined troll content.
+        """
+        logger.info("Triggering troll response")
+
+        troll_results = [TROLL]
+        content_list = [{k: item.get(k) for k in self.fields_for_llm} for item in troll_results]
+        part = Part.from_function_response(name=call.name, response={"content": content_list})
+        return [part], troll_results
 
     def num_tokens(
         self,
@@ -129,10 +159,10 @@ class LLMClient:
                 elif content.parts[0].function_response:
                     total_in += _count(json.dumps(content.parts[0].function_response.response))
 
-        total_in += _count(new_user_msg)  # current user text
+        total_in += _count(new_user_msg)
 
         # --- OUTPUT ---
-        total_out = _count(assistant_reply)  # assistant free‑form text
+        total_out = _count(assistant_reply)
 
         return total_in, total_out
 
@@ -212,6 +242,8 @@ class LLMClient:
         prior_history = history + [Content(role="user", parts=[Part(text=message)])]
         prior_history = prior_history + [Content(role="model", parts=parts)] if involved_fc else prior_history
         token_in, token_out = self.num_tokens(prior_history, new_user_msg=message, assistant_reply=full_reply)
+
+        troll_triggered = any(call.name == "trigger_troll_response" for call in collected_calls)
         logs = {
             "version": "1.0",
             "model": self.model_name,
@@ -220,6 +252,7 @@ class LLMClient:
             "output_tokens": token_out,
             "rag_speed": rag_duration if involved_fc else 0,
             "llm_speed": (llm_initial_duration + (llm_followup_duration if involved_fc else 0)),
+            "troll_triggered": troll_triggered,
             "total_time": total_duration,
         }
         yield json.dumps(logs, ensure_ascii=False)
