@@ -67,6 +67,7 @@ origins = [
     "https://localhost:3000",
     "https://react-stage.haaretz.co.il",
     "https://canary.haaretz.co.il",
+    "https://react-cu-86c2jh5hv.k8s-stage.haaretz.co.il",
 ]
 
 
