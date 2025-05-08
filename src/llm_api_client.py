@@ -271,6 +271,9 @@ class LLMClient:
                 "output_tokens": token_out,
                 "rag_speed": rag_duration if involved_fc else 0,
                 "llm_speed": (llm_initial_duration + (llm_followup_duration if involved_fc else 0)),
+                "function_calls_args": [
+                    {k: call.args.get(k) for k in call.args} for call in collected_calls if call.args
+                ],
                 "troll_triggered": troll_triggered,
                 "total_time": total_duration,
             }
