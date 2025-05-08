@@ -6,7 +6,14 @@ from google import genai
 from google.genai import types
 from google.genai.types import Content, FunctionCall, Part
 
-from constant import NO_RESULT, TROLL
+from constant import (
+    NO_RESULT,
+    TROLL,
+    end_tag_info,
+    end_tag_logs,
+    start_tag_info,
+    start_tag_logs,
+)
 from logger import logger
 from src.redis_chat_history import RedisChatHistory
 from src.tools.import_tools import qdrant_tools
@@ -166,6 +173,10 @@ class LLMClient:
 
         return total_in, total_out
 
+    @staticmethod
+    def contains_disallowed_tags(text: str) -> bool:
+        return any(sub in text for sub in [start_tag_logs, end_tag_logs, start_tag_info, end_tag_info])
+
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         collected_calls: List[FunctionCall] = []
         involved_fc = False
@@ -180,6 +191,9 @@ class LLMClient:
         llm_start = time.time()
         for chunk in chat.send_message_stream(message):
             if chunk.text:
+                if self.contains_disallowed_tags(chunk.text):
+                    yield "Error: Disallowed tags detected in the response."
+                    break
                 yield chunk.text
                 full_reply += chunk.text
             func_call = (
@@ -209,14 +223,18 @@ class LLMClient:
 
             # 2) Yield frontend‐metadata if needed
             if metadata:
-                yield metadata
+                yield start_tag_info + metadata + end_tag_info
 
             # 3) Stream the LLM’s follow-up (using only the minimal `parts`)
             llm_followup_start = time.time()
             for chunk in chat.send_message_stream(parts):
                 if chunk.text:
-                    yield chunk.text
-                    full_reply += chunk.text
+                    if not self.contains_disallowed_tags(chunk.text):
+                        yield chunk.text
+                        full_reply += chunk.text
+                    else:
+                        yield "Error: Disallowed tags detected in the response."
+                        break
 
             llm_followup_end = time.time()
             llm_followup_duration = llm_followup_end - llm_followup_start
@@ -257,7 +275,7 @@ class LLMClient:
                 "total_time": total_duration,
             }
         }
-        yield json.dumps(logs, ensure_ascii=False)
+        yield start_tag_logs + json.dumps(logs, ensure_ascii=False) + end_tag_logs
 
 
 async def main_cli():
