@@ -131,7 +131,7 @@ class LLMClient:
         """
         Handle 'trigger_troll_response' calls by returning predefined troll content.
         """
-        logger.info("Triggering troll response")
+        logger.debug("Triggering troll response")
 
         troll_results = [TROLL]
         content_list = [{k: item.get(k) for k in self.fields_for_llm} for item in troll_results]
