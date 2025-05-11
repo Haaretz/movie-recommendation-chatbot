@@ -104,7 +104,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
     """
     global llm_client_instance, client
 
-    logger.info("Received streaming request: '%s' for user %s", user_message, user_id)
+    logger.debug("Received streaming request: '%s' for user %s", user_message, user_id)
     full_response = ""
 
     try:
@@ -112,7 +112,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
             yield chunk
             await asyncio.sleep(0)
             full_response += chunk
-        logger.info("Final response: '%s'", full_response)
+        logger.debug("Final response: '%s'", full_response)
 
     except Exception as e:
         logger.error("LLMClient error: %s. Reinitializing client and retrying once.", e)
@@ -122,7 +122,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
             full_response_retry += chunk
-        logger.info("Final response after retry: '%s'", full_response_retry)
+        logger.debug("Final response after retry: '%s'", full_response_retry)
 
 
 # --------------------------------------------------------------------------- #
