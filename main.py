@@ -135,6 +135,7 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     POST /chat
     Validate the request and stream LLM responses in plain text.
     """
+    logger.info("Received chat message: %s", chat_message)
     user_message = chat_message.message
     user_id = chat_message.user_id
 
