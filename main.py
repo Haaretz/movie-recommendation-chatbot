@@ -3,6 +3,7 @@ Full FastAPI server file – revised so the model name used for
 `count_tokens()` comes from configuration instead of being hard‑coded.
 """
 
+import asyncio
 import os
 from typing import AsyncGenerator
 
@@ -109,6 +110,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
     try:
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
             yield chunk
+            await asyncio.sleep(0)
             full_response += chunk
         logger.info("Final response: '%s'", full_response)
 
