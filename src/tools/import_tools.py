@@ -36,7 +36,12 @@ get_articles = FunctionDeclaration(
         "properties": {
             "query": {
                 "type": "string",
-                "description": "The user's request in Hebrew, containing either the criteria for recommendations OR the descriptive clues for identifying a specific content. This should capture the essence of what they are looking for or trying to identify.",
+                "description": (
+                    "Concise summary of the user's request containing only key search criteria "
+                    "for embedding as a RETRIEVAL_QUERY: "
+                    "- Exact or partial title OR descriptive clues (plot points, actors, director, festival)  "
+                    "Exclude filler words and extraneous context; focus on terms that improve vector matching."
+                ),
             },
             "media_type": {
                 "type": "string",

@@ -136,7 +136,7 @@ class ConversationSimulator:
 # Example harness
 if __name__ == "__main__":
     client = ChatClient()
-    params = TestParameters(num_sessions=10)
+    params = TestParameters(num_sessions=1)
     client_simulator = genai.Client()
     sim = ConversationSimulator(client, params, client_simulator)
     # generate random personality sequences
