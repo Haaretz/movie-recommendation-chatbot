@@ -47,11 +47,11 @@ class SearchArticle(QdrantClientManager, Embedding):
     ) -> models.Filter:
         must_conditions = []
 
-        if len(streaming) > 0:
+        if streaming:
             must_conditions.append(
                 models.FieldCondition(key="distribution_platform", match=models.MatchAny(any=streaming))
             )
-        if len(genres) > 0:
+        if genres:
             must_conditions.append(models.FieldCondition(key="genre", match=models.MatchAny(any=genres)))
         if review_type:
             replacements = {"movie": "Movie", "series": "Series"}

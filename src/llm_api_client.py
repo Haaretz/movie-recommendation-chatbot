@@ -97,9 +97,9 @@ class LLMClient:
         """
         args = call.args
         query = args.get("query")
-        streaming = args.get("streaming_platforms", [])
-        genres = args.get("Genres", [])
-        media_type = args.get("media_type")
+        streaming = args.get("streaming_platforms", None)
+        genres = args.get("Genres", None)
+        media_type = args.get("media_type", None)
 
         logger.info(
             "Executing get_dataset_articles with query=%s, streaming=%s, genres=%s, media_type=%s",
