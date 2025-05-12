@@ -15,12 +15,13 @@ get_articles = FunctionDeclaration(
     2.  **Providing Recommendations (General and Specific):** This function **must be used** whenever the user asks for suggestions on movies or TV shows to watch.
         *   **Trigger Activation:** Activate this function for **all** recommendation requests, regardless of whether the user provides specific criteria (like genre - "thriller", "horror"; platform - "Yes Plus"; mood - "addictive", "really scary"; similarity to other titles) **or if they make a completely open-ended, general request** (e.g., "What should I watch?", "Recommend a good movie", "Looking for a binge-worthy series", "Seen anything good lately?").
         *   **Function's Purpose:** The function is designed to provide informed recommendations by querying relevant data sources or performing targeted searches (e.g., using the RAG system) to find suitable viewing options—whether popular, highly-rated, or matching specific requirements (if provided).
-        *   **Example Triggers:** Trigger this function for inputs like: "Recommend a good thriller series on Yes Plus," "My friends and I want a scary horror movie," "Looking for an addictive series to binge," "Just give me a recommendation for a good movie."
+        *   **Example Triggers:** Trigger this function for inputs like: "Recommend a good thriller series on Yes Plus," "My friends and I want a scary horror movie," "Looking for an addictive series to binge," "Just give me a recommendation for a good movie." "Let's try a psychological thriller with a dark twist. Do you have something like that to suggest? Something that will make me think twice before I go to sleep? 😉
 
 
     3.  **Identification Leading to Information/Review:** The user is trying to remember/identify a show/movie by describing it. Trigger this function to use the description as a query, understanding the likely goal is to find the item *and then* potentially retrieve information or a review about it via the RAG system. (e.g., "What's that movie about...?").
 
     4. **Comparison between Titles:** The user is looking for a comparison between two or more titles, which may involve identifying similarities or differences. Run the function separately on each title.
+
 
     **Important Constraint:** **Do not** simply provide a generic textual recommendation based on the model's internal knowledge. **Always invoke this function** for recommendation requests to ensure the suggestions are generated using the designated tool/data.
 
@@ -60,7 +61,7 @@ get_articles = FunctionDeclaration(
                     ],
                 },
             },
-            "Genres": {
+            "genres": {
                 "type": "array",
                 "description": "A list of genres the user is interested in (e.g., ['comedy', 'drama']). Optional; used to filter recommendations.",
                 "items": {

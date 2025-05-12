@@ -98,7 +98,7 @@ class LLMClient:
         args = call.args
         query = args.get("query")
         streaming = args.get("streaming_platforms", None)
-        genres = args.get("Genres", None)
+        genres = args.get("genres", None)
         media_type = args.get("media_type", None)
 
         logger.info(
