@@ -185,4 +185,5 @@ async def version():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logger.info("Starting Uvicorn server on port %s", port)
+    logger.info("version: %s", "0.0.1")
     uvicorn.run(app, host="0.0.0.0", port=port)
