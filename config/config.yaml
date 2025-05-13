@@ -25,7 +25,7 @@ embedding:
   embedding_model_name : text-multilingual-embedding-002
   embedding_dimensionality : 768
 qdrant:
-  MIN_SCORE_THRESHOLD: 0.7
+  MIN_SCORE_THRESHOLD: 0.8
   SEARCH_LIMIT: 2
   qdrant_url: "from env"
   qdrant_collection_name: movie-recommendation-chatbot
