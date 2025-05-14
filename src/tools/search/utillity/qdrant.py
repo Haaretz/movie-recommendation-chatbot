@@ -1,12 +1,16 @@
 from qdrant_client import QdrantClient
 
+from config.loader import load_config
+from config.models import QdrantConfig
 from logger import logger
 
 
 class QdrantClientManager:
-    def __init__(self, config):
-        self.config = config
-        self.client_qdrant = QdrantClient(config)
+    def __init__(self, qdrant_config: QdrantConfig):
+        # Use unpacking to initialize the client directly
+        self.client_qdrant = QdrantClient(
+            url=qdrant_config.qdrant_url,
+        )
 
     def close(self):
         """
@@ -20,7 +24,8 @@ class QdrantClientManager:
 
 
 if __name__ == "__main__":
+    # Load full config (from all YAMLs + env)
+    app_config = load_config()
 
-    from config.load_config import load_config
-
-    config = load_config("config/config.yaml")
+    # Pass only the qdrant config to the manager
+    qdrant_manager = QdrantClientManager(app_config.qdrant)

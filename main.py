@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from google import genai
 from pydantic import BaseModel
 
-from config.load_config import load_config
+from config.loader import load_config
 from constant import LONG_REQUEST
 from logger import logger
 from src.llm_api_client import LLMClient
@@ -24,41 +24,41 @@ from src.redis_chat_history import RedisChatHistory
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-def create_llm_client():
+def create_llm_client_and_model():
     """
-    (Re)initialize the LLMClient with current config and return it
-    together with its genai client.
+    Initialize AppConfig and LLMClient.
     """
-    prompts = load_config("config/prompts.yaml")
-    sys_instruct = prompts.get("system_instructions")
 
-    config = load_config("config/config.yaml")
-    llm_cfg = config.get("llm", {})
+    # Load full app config (llm, qdrant, embedding, fields)
+    app_config = load_config()
 
-    redis_store = RedisChatHistory()
+    # Load system prompt from prompts.yaml
+    import yaml
 
-    # Grab the model name and API key from config
-    model_name = llm_cfg.get("llm_model_name")
-    api_key = llm_cfg.get("GOOGLE_API_KEY")
+    with open("config/prompts.yaml", "r") as f:
+        prompts = yaml.safe_load(f)
+    sys_instruct = prompts.get("system_instructions", "")
 
-    # Initialise Google genai client
-    client = genai.Client()
-
-    # Construct our wrapper client
+    # Initialize LLM wrapper
     llm_client = LLMClient(
-        model_name=model_name,
-        api_key=api_key,
+        llm_config=app_config.llm,
+        embedding_config=app_config.embedding,
+        qdrant_config=app_config.qdrant,
+        fields_config=app_config.fields,
         sys_instruct=sys_instruct,
-        config=config,
-        redis_store=redis_store,
+        redis_store=RedisChatHistory(),
     )
-    return llm_client, client
+
+    # Also return raw genai client (used for token counting)
+    model_client = genai.Client(api_key=app_config.llm.GOOGLE_API_KEY)
+
+    return llm_client, model_client
 
 
 # --------------------------------------------------------------------------- #
 # One global instance, created at startup
 # --------------------------------------------------------------------------- #
-llm_client_instance, client = create_llm_client()
+llm_client_instance, genai_client = create_llm_client_and_model()
 
 # --------------------------------------------------------------------------- #
 # FastAPI setup
@@ -117,7 +117,7 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
 
     except Exception as e:
         logger.error("LLMClient error: %s. Reinitializing client and retrying once.", e)
-        llm_client_instance, client = create_llm_client()
+        llm_client_instance, client = create_llm_client_and_model()
 
         full_response_retry = ""
         async for chunk in llm_client_instance.streaming_message(user_message, user_id):
@@ -148,7 +148,7 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     model_for_count = llm_client_instance.model_name
 
     # Token limit check (hard limit: 150 tokens)
-    token_count = client.models.count_tokens(model=model_for_count, contents=user_message).total_tokens
+    token_count = genai_client.models.count_tokens(model=model_for_count, contents=user_message).total_tokens
 
     if token_count > 200:
         return LONG_REQUEST

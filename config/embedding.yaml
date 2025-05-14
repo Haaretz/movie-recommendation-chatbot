@@ -1,0 +1,2 @@
+embedding_model_name: text-multilingual-embedding-002
+embedding_dimensionality: 768

@@ -1,6 +1,8 @@
 from google import genai
 from google.genai.types import FunctionDeclaration, Tool
 
+from config.loader import load_config
+
 get_articles = FunctionDeclaration(
     name="get_dataset_articles",
     description="""
@@ -122,28 +124,40 @@ qdrant_tools = Tool(
 )
 
 if __name__ == "__main__":
-    import os
+    # Load configuration
+    app_config = load_config()
 
-    from google.genai import types
+    # Use system instructions from prompts YAML (optional)
+    try:
+        import yaml
 
-    from config.load_config import load_config
+        with open("config/prompts.yaml", "r") as f:
+            prompts = yaml.safe_load(f)
+            sys_instruct = prompts.get("system_instructions", "")
+    except Exception as e:
+        sys_instruct = ""
+        print(f"Could not load system instructions: {e}")
 
-    prompts = load_config("config/prompts.yaml")
-    sys_instruct = prompts["system_instructions"]
-    client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-    MODEL_ID = "gemini-2.0-flash"
+    # Initialize Gemini client using API key from config
+    client = genai.Client(api_key=app_config.llm.GOOGLE_API_KEY)
 
+    # Use model name from config
+    MODEL_ID = app_config.llm.llm_model_name
+
+    # Create chat with tools
     chat = client.chats.create(
         model=MODEL_ID,
-        config=types.GenerateContentConfig(
+        config=genai.types.GenerateContentConfig(
             system_instruction=sys_instruct,
             tools=[qdrant_tools],
         ),
     )
 
+    # Example user prompt
     prompt = """
 שלום, קוראים לי משה, בא לי לראות סרט מצויר בסגנון פיקסר
     """
     response = chat.send_message(prompt)
-    response.function_calls
+
+    # Print the function call(s) chosen by the LLM
     print(response.function_calls)

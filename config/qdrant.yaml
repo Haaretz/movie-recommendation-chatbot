@@ -1,0 +1,4 @@
+MIN_SCORE_THRESHOLD: 0.8
+SEARCH_LIMIT: 2
+qdrant_collection_name: movie-recommendation-chatbot
+embedding_metric: cosine

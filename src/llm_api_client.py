@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from google.genai.types import Content, FunctionCall, Part
 
+from config.models import EmbeddingConfig, FieldsConfig, LLMConfig, QdrantConfig
 from constant import (
     NO_RESULT,
     TROLL,
@@ -25,21 +26,22 @@ class LLMClient:
 
     def __init__(
         self,
-        model_name: str,
-        api_key: str,
+        llm_config: LLMConfig,
+        embedding_config: EmbeddingConfig,
+        qdrant_config: QdrantConfig,
+        fields_config: FieldsConfig,
         sys_instruct: str,
-        config,
         redis_store: RedisChatHistory,
     ):
-        self.search_article = SearchArticle(config)
+        self.search_article = SearchArticle(qdrant_config, embedding_config)
         self.sys_instruct = sys_instruct
-        self.model_name = model_name
-        self.fields_for_frontend = config.get("fields_for_frontend", {})
-        self.fields_for_llm = config.get("fields_for_llm", {})
-        self.redis = redis_store  # composition – dependency injection
+        self.model_name = llm_config.llm_model_name
+        self.api_key = llm_config.GOOGLE_API_KEY
+        self.fields_for_frontend = fields_config.fields_for_frontend
+        self.fields_for_llm = fields_config.fields_for_llm
+        self.redis = redis_store
 
-        # --- LLM Initialization ---
-        self.client = genai.Client(vertexai=False, api_key=api_key)
+        self.client = genai.Client(vertexai=False, api_key=self.api_key)
 
     def _create_chat_session(self, history: Optional[List[Content]] = None):
         return self.client.chats.create(
@@ -373,20 +375,24 @@ class LLMClient:
 async def main_cli():
     import numpy as np
 
-    from config.load_config import load_config
+    from config.loader import load_config
 
-    prompts = load_config("config/prompts.yaml")
-    sys_instruct = prompts.get("system_instructions")
-    config = load_config("config/config.yaml")
-    llm_cfg = config.get("llm", {})
+    app_config = load_config()
 
-    redis_store = RedisChatHistory()
+    # Load system instructions from prompts.yaml
+    import yaml
+
+    with open("config/prompts.yaml", "r") as f:
+        prompts = yaml.safe_load(f)
+    sys_instruct = prompts.get("system_instructions", "")
+
     llm_client = LLMClient(
-        model_name=llm_cfg.get("llm_model_name"),
-        api_key=llm_cfg.get("GOOGLE_API_KEY"),
+        llm_config=app_config.llm,
+        embedding_config=app_config.embedding,
+        qdrant_config=app_config.qdrant,
+        fields_config=app_config.fields,
         sys_instruct=sys_instruct,
-        config=config,
-        redis_store=redis_store,
+        redis_store=RedisChatHistory(),
     )
 
     counter = np.random.randint(1, 99999)
@@ -404,10 +410,10 @@ async def main_cli():
             print(chunk, end="", flush=True)
         print()
 
-        async for chunk in llm_client.regenerate_response(user_id=counter):
-            print(chunk, end="", flush=True)
+        # async for chunk in llm_client.regenerate_response(user_id=counter):
+        #     print(chunk, end="", flush=True)
 
-        print()
+        # print()
 
 
 if __name__ == "__main__":

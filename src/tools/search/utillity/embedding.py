@@ -3,11 +3,19 @@ import os
 import vertexai
 from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
 
+from config.loader import load_config
+
 
 class Embedding:
-    def __init__(self, model: TextEmbeddingModel, embedding_dimensionality: int):
+    def __init__(self, EmbeddingConfig):
+        # Initialize VertexAI with default project or from env
         vertexai.init(project=os.environ.get("VERTEXAI_PROJECT", "htz-data"))
-        self.model = TextEmbeddingModel.from_pretrained(model)
+
+        # Load the embedding model by name
+        model_name = EmbeddingConfig.embedding_model_name
+        embedding_dimensionality = EmbeddingConfig.embedding_dimensionality
+
+        self.model = TextEmbeddingModel.from_pretrained(model_name)
         self.embedding_dimensionality = embedding_dimensionality
 
     def embed_query(self, text):
@@ -27,15 +35,16 @@ class Embedding:
 
 
 if __name__ == "__main__":
-    from config.load_config import load_config
+    # Load full application configuration
+    app_config = load_config()
 
-    config = load_config("config/config.yaml")
-    embedding_model_name = config["embedding"]["embedding_model_name"]
-    embedding_dimensionality = config["embedding"]["embedding_dimensionality"]
-    embedding = Embedding(embedding_model_name, embedding_dimensionality)
+    # Extract the relevant section for embedding
+    embedding_config = app_config.embedding
+
+    # Instantiate the embedding class using values from config
+    embedding = Embedding(embedding_config)
+
+    # Example single input
     text = "This is a test sentence."
-    embeddings = embedding.embed_article(text)
-    print(embeddings)
-    text = ["This is a test sentence."] * 3
-    embeddings = embedding.embed_article(text)
+    embeddings = embedding.embed_query(text)
     print(embeddings)

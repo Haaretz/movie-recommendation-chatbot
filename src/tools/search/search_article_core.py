@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Union
 
 from qdrant_client import models
 
+from config.models import EmbeddingConfig, QdrantConfig
 from logger import logger
 from src.tools.search.utillity.embedding import Embedding
 from src.tools.search.utillity.qdrant import QdrantClientManager
@@ -12,20 +13,15 @@ class SearchArticle(QdrantClientManager, Embedding):
     HNSW_EF = 128
     SCROLL_LIMIT = 10
 
-    def __init__(self, config: Dict[str, Any]):
-        """Initialize SearchArticle class, inheriting from QdrantClientManager and Embedding."""
-        self.config = config
-        self.MIN_SCORE_THRESHOLD = config["qdrant"]["MIN_SCORE_THRESHOLD"]
-        self.SEARCH_LIMIT = config["qdrant"]["SEARCH_LIMIT"]
+    def __init__(self, qdrant_config: QdrantConfig, embedding_config: EmbeddingConfig):
+        """Initialize SearchArticle with structured configs."""
+        self.MIN_SCORE_THRESHOLD = qdrant_config.MIN_SCORE_THRESHOLD
+        self.SEARCH_LIMIT = qdrant_config.SEARCH_LIMIT
+        self.qdrant_collection_name = qdrant_config.qdrant_collection_name
 
-        QdrantClientManager.__init__(self, config["qdrant"]["qdrant_url"])
-        Embedding.__init__(
-            self,
-            config["embedding"]["embedding_model_name"],
-            config["embedding"]["embedding_dimensionality"],
-        )
-
-        self.qdrant_collection_name = config["qdrant"].get("qdrant_collection_name")
+        # Initialize Qdrant client and Embedding
+        QdrantClientManager.__init__(self, qdrant_config)
+        Embedding.__init__(self, embedding_config)
 
     def _extract_and_translate_payload_from_points(
         self, points: List[Union[models.ScoredPoint, models.PointStruct]]
@@ -112,13 +108,16 @@ class SearchArticle(QdrantClientManager, Embedding):
 
 
 if __name__ == "__main__":
-    from config.load_config import load_config
+    from config.loader import load_config
 
-    config = load_config("config/config.yaml")
+    app_config = load_config()
 
-    SA = SearchArticle(config)
+    searcher = SearchArticle(
+        qdrant_config=app_config.qdrant,
+        embedding_config=app_config.embedding,
+    )
 
-    result = SA.retrieve_relevant_documents(
+    result = searcher.retrieve_relevant_documents(
         query="הסרט החדש של לוקה גואדנינו שמבוסס על ספר של בורוז על הומו שחי במקסיקו בשנות ה-50 ומחפש גברים צעירים",
         streaming=[],
         genres=[],
