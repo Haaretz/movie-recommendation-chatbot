@@ -177,25 +177,116 @@ class LLMClient:
     def contains_disallowed_tags(text: str) -> bool:
         return any(sub in text for sub in [start_tag_logs, end_tag_logs, start_tag_info, end_tag_info])
 
+    async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:
+        """Regenerate the response for the last user message, reusing streaming logic."""
+        # TODO: consider deferring this deletion after response yield for lower perceived latency
+        last_user_msg = self.redis.pop_last_conversation(user_id)
+
+        history = self.redis.load_history(user_id)
+        # # trim trailing model messages
+        # while history and history[-1].role == 'model':
+        #     history.pop()
+        # # find last user message
+        # last_user_msg = None
+        # for content in reversed(history):
+        #     if content.role == 'user':
+        #         last_user_msg = content.parts[0].text
+        #         break
+        # if not last_user_msg:
+        #     raise ValueError(f"No user message found for user_id={user_id}")
+        # stream using shared helper
+        async for chunk in self._process_message_stream(last_user_msg, history, user_id, regenerate=True):
+            yield chunk
+
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
+        """Handle a new user message with full persistence."""
+        history = self.redis.load_history(user_id)
+        # stream and capture
+        async for chunk in self._process_message_stream(message, history, user_id):
+            yield chunk
+        # persist turn
+        # (omitted: persistence logic identical to original)
+
+    async def _process_message_stream(
+        self, message: str, history: List[Content], user_id: str, regenerate: bool = False
+    ) -> AsyncGenerator[str, None]:
+        chat = self._create_chat_session(history=history)
+        full_reply = ""
         collected_calls: List[FunctionCall] = []
         involved_fc = False
 
-        history = self.redis.load_history(user_id)
-        chat = self._create_chat_session(history=history)
-        full_reply = ""
-
         total_start = time.time()
+        llm_initial_duration = 0
+        rag_duration = 0
+        llm_followup_duration = 0
 
-        # --- send user message to LLM, collect function calls if any ---
+        # --- Step 1: Stream initial LLM response ---
         llm_start = time.time()
+        async for chunk in self._stream_llm_response(chat, message, collected_calls):
+            if chunk == "DISALLOWED_TAGS":
+                yield "Error: Disallowed tags detected in the response."
+                return
+            full_reply += chunk
+            yield chunk
+        llm_initial_duration = time.time() - llm_start
+
+        # --- Step 2: Handle Function Calls ---
+        parts = None
+        search_results = None
+        metadata = None
+
+        if collected_calls:
+            involved_fc = True
+            rag_start = time.time()
+            parts, metadata, search_results = self._filter_fields_and_call_tool(collected_calls)
+            rag_duration = time.time() - rag_start
+
+            if metadata:
+                yield start_tag_info + metadata + end_tag_info
+
+            llm_followup_start = time.time()
+            async for chunk in self._stream_llm_followup(chat, parts):
+                if chunk == "DISALLOWED_TAGS":
+                    yield "Error: Disallowed tags detected in the response."
+                    return
+                full_reply += chunk
+                yield chunk
+            llm_followup_duration = time.time() - llm_followup_start
+
+        # --- Step 3: Save to Redis and log ---
+        self._save_chat(message, involved_fc, full_reply, user_id, parts if involved_fc else None)
+        total_duration = time.time() - total_start
+
+        durations = {
+            "llm_initial": llm_initial_duration,
+            "rag": rag_duration,
+            "llm_followup": llm_followup_duration,
+            "total": total_duration,
+        }
+
+        yield self._generate_logs(
+            message=message,
+            user_id=user_id,
+            model=self.model_name,
+            collected_calls=collected_calls,
+            full_reply=full_reply,
+            history=history,
+            involved_fc=involved_fc,
+            parts=parts if involved_fc else None,
+            durations=durations,
+            regenerate=regenerate,
+        )
+
+    async def _stream_llm_response(
+        self, chat, message: str, collected_calls: List[FunctionCall]
+    ) -> AsyncGenerator[str, None]:
         for chunk in chat.send_message_stream(message):
             if chunk.text:
                 if self.contains_disallowed_tags(chunk.text):
-                    yield "Error: Disallowed tags detected in the response."
-                    break
+                    yield "DISALLOWED_TAGS"
+                    return
                 yield chunk.text
-                full_reply += chunk.text
+
             func_call = (
                 chunk.candidates
                 and chunk.candidates[0].content
@@ -204,43 +295,67 @@ class LLMClient:
             )
             if func_call:
                 collected_calls.append(func_call)
-                involved_fc = True
 
-        llm_end = time.time()
-        llm_initial_duration = llm_end - llm_start
+    async def _stream_llm_followup(self, chat, parts: List[Part]) -> AsyncGenerator[str, None]:
+        for chunk in chat.send_message_stream(parts):
+            if chunk.text:
+                if self.contains_disallowed_tags(chunk.text):
+                    yield "DISALLOWED_TAGS"
+                    return
+                yield chunk.text
 
-        # --- if we did call a tool, filter & run it ---
-        if involved_fc:
-            rag_start = time.time()
-            parts, metadata, search_results = self._filter_fields_and_call_tool(collected_calls)
-            rag_duration = time.time() - rag_start
+    def _generate_logs(
+        self,
+        *,
+        message: str,
+        user_id: str,
+        model: str,
+        collected_calls: List[FunctionCall],
+        full_reply: str,
+        history: List[Content],
+        involved_fc: bool,
+        parts: Optional[List[Part]],
+        durations: dict,
+        regenerate: bool,
+    ) -> str:
+        prior_history = history + [Content(role="user", parts=[Part(text=message)])]
+        if involved_fc and parts:
+            prior_history += [Content(role="model", parts=parts)]
 
-            # 1) Log the full raw results for your cost/audit logs
-            logger.debug(
-                "Raw search_results for cost tracking: %s",
-                json.dumps(search_results, ensure_ascii=False),
-            )
+        token_in, token_out = self.num_tokens(prior_history, new_user_msg=message, assistant_reply=full_reply)
 
-            # 2) Yield frontend‐metadata if needed
-            if metadata:
-                yield start_tag_info + metadata + end_tag_info
+        troll_triggered = any(call.name == "trigger_troll_response" for call in collected_calls)
+        logs = {
+            "additional_info": {
+                "version": "1.0",
+                "model": model,
+                "user_id": user_id,
+                "input_tokens": token_in,
+                "output_tokens": token_out,
+                "rag_speed": durations.get("rag", 0),
+                "llm_speed": durations.get("llm_initial", 0) + durations.get("llm_followup", 0),
+                "function_calls_args": [
+                    {k: call.args.get(k) for k in call.args} for call in collected_calls if call.args
+                ],
+                "troll_triggered": troll_triggered,
+                "total_time": durations.get("total", 0),
+                "regenerate": regenerate,
+            }
+        }
+        return start_tag_logs + json.dumps(logs, ensure_ascii=False) + end_tag_logs
 
-            # 3) Stream the LLM’s follow-up (using only the minimal `parts`)
-            llm_followup_start = time.time()
-            for chunk in chat.send_message_stream(parts):
-                if chunk.text:
-                    if not self.contains_disallowed_tags(chunk.text):
-                        yield chunk.text
-                        full_reply += chunk.text
-                    else:
-                        yield "Error: Disallowed tags detected in the response."
-                        break
-
-            llm_followup_end = time.time()
-            llm_followup_duration = llm_followup_end - llm_followup_start
-
-        # --- Persist conversation into Redis, but only minimal parts in history ---
-        # Save the user’s message
+    def _save_chat(
+        self,
+        message: str,
+        involved_fc: bool,
+        full_reply: str,
+        user_id: str,
+        parts: Optional[List[Part]] = None,
+    ):
+        """
+        Save the user message and assistant reply to Redis.
+        If involved_fc is True, save only the function-response parts.
+        """
         self.redis.save_message(user_id, Content(role="user", parts=[Part(text=message)]))
 
         if involved_fc:
@@ -253,32 +368,6 @@ class LLMClient:
             assistant_msg = Content(role="model", parts=[Part(text=full_reply)])
 
         self.redis.save_message(user_id, assistant_msg)
-
-        total_end = time.time()
-        total_duration = total_end - total_start
-
-        prior_history = history + [Content(role="user", parts=[Part(text=message)])]
-        prior_history = prior_history + [Content(role="model", parts=parts)] if involved_fc else prior_history
-        token_in, token_out = self.num_tokens(prior_history, new_user_msg=message, assistant_reply=full_reply)
-
-        troll_triggered = any(call.name == "trigger_troll_response" for call in collected_calls)
-        logs = {
-            "additional_info": {
-                "version": "1.0",
-                "model": self.model_name,
-                "user_id": user_id,
-                "input_tokens": token_in,
-                "output_tokens": token_out,
-                "rag_speed": rag_duration if involved_fc else 0,
-                "llm_speed": (llm_initial_duration + (llm_followup_duration if involved_fc else 0)),
-                "function_calls_args": [
-                    {k: call.args.get(k) for k in call.args} for call in collected_calls if call.args
-                ],
-                "troll_triggered": troll_triggered,
-                "total_time": total_duration,
-            }
-        }
-        yield start_tag_logs + json.dumps(logs, ensure_ascii=False) + end_tag_logs
 
 
 async def main_cli():
@@ -313,6 +402,11 @@ async def main_cli():
         print("LLM: ", end="", flush=True)
         async for chunk in llm_client.streaming_message(user_msg, user_id=counter):
             print(chunk, end="", flush=True)
+        print()
+
+        async for chunk in llm_client.regenerate_response(user_id=counter):
+            print(chunk, end="", flush=True)
+
         print()
 
 

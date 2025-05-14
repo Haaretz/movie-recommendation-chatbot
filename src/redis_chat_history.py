@@ -85,3 +85,31 @@ class RedisChatHistory:
                 parts.append(Part(text=text))
 
         return Content(role=data["role"], parts=parts)
+
+    def pop_last_conversation(self, user_id: str) -> None:
+        """
+        Removes all consecutive 'model' messages from the end of the history,
+        followed by the last 'user' message if present.
+        """
+        key = f"chat_history:{user_id}"
+        while True:
+            raw = self._client.lindex(key, -1)
+            if not raw:
+                break
+            data = json.loads(raw)
+            if data.get("role") == "model":
+                self._client.rpop(key)
+            else:
+                break
+
+        # Now check if last is a user message and remove it too
+        raw = self._client.lindex(key, -1)
+        if raw:
+            data = json.loads(raw)
+            if data.get("role") == "user":
+                self._client.rpop(key)
+                parts = data.get("parts", [])
+                if parts:
+                    user_text = parts[0].get("text")
+
+        return user_text
