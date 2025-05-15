@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class ChatConfig(BaseModel):
     max_user_messages_per_session: int = 10
     warn_template: str
+    warn_last_message: str
     blocked_message: str
     long_request: str
     token_limit: int

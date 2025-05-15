@@ -98,7 +98,7 @@ class LLMClient:
                 ensure_ascii=False,
             )
 
-        return parts, metadata, search_results
+        return parts, metadata
 
     def _handle_get_dataset_articles(self, call):
         """
@@ -198,19 +198,31 @@ class LLMClient:
         remaining = max_allowed - count
 
         if remaining <= 0:
-            return True, "😕 הגעת למספר ההודעות המרבי לשיחה. רוצה להתחיל שיחה חדשה?"
+            return True, self.chat_config.blocked_message
 
         self.redis.increment_usage_counter(user_id)
 
+        if remaining == 1:
+            return False, self.chat_config.warn_last_message
+
         if remaining <= 3:
-            return False, f"<system>המשתמש יכול לשלוח עוד {remaining} הודעות.</system>"
+            return False, self.chat_config.warn_template.format(remaining=remaining - 1)
 
         return False, None
 
     async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
+        blocked, system_warning = self._consume_user_message_credit(user_id)
+        if blocked:
+            yield system_warning
+            return
+
         last_user_msg = self.redis.pop_last_conversation(user_id)
+
+        # Inject warning into the message itself
+        if system_warning:
+            last_user_msg = f"{system_warning}\n{last_user_msg}"
 
         history = self.redis.load_history(user_id)
         async for chunk in self._process_message_stream(last_user_msg, history, user_id, regenerate=True):
@@ -222,12 +234,15 @@ class LLMClient:
         if blocked:
             yield system_warning
             return
+
+        # Inject warning into the message itself
+        if system_warning:
+            message = f"{system_warning}\n{message}"
+
         history = self.redis.load_history(user_id)
-        # stream and capture
+
         async for chunk in self._process_message_stream(message, history, user_id):
             yield chunk
-        # persist turn
-        # (omitted: persistence logic identical to original)
 
     async def _process_message_stream(
         self, message: str, history: List[Content], user_id: str, regenerate: bool = False
@@ -254,13 +269,12 @@ class LLMClient:
 
         # --- Step 2: Handle Function Calls ---
         parts = None
-        search_results = None
         metadata = None
 
         if collected_calls:
             involved_fc = True
             rag_start = time.time()
-            parts, metadata, search_results = self._filter_fields_and_call_tool(collected_calls)
+            parts, metadata = self._filter_fields_and_call_tool(collected_calls)
             rag_duration = time.time() - rag_start
 
             if metadata:
@@ -413,6 +427,7 @@ async def main_cli():
         fields_config=app_config.fields,
         sys_instruct=sys_instruct,
         redis_store=RedisChatHistory(),
+        chat_config=app_config.chat,
     )
 
     counter = np.random.randint(1, 99999)
@@ -430,10 +445,10 @@ async def main_cli():
             print(chunk, end="", flush=True)
         print()
 
-        # async for chunk in llm_client.regenerate_response(user_id=counter):
-        #     print(chunk, end="", flush=True)
+        async for chunk in llm_client.regenerate_response(user_id=counter):
+            print(chunk, end="", flush=True)
 
-        # print()
+        print()
 
 
 if __name__ == "__main__":
