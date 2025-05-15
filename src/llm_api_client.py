@@ -6,7 +6,13 @@ from google import genai
 from google.genai import types
 from google.genai.types import Content, FunctionCall, Part
 
-from config.models import EmbeddingConfig, FieldsConfig, LLMConfig, QdrantConfig
+from config.models import (
+    ChatConfig,
+    EmbeddingConfig,
+    FieldsConfig,
+    LLMConfig,
+    QdrantConfig,
+)
 from constant import (
     NO_RESULT,
     TROLL,
@@ -32,6 +38,7 @@ class LLMClient:
         fields_config: FieldsConfig,
         sys_instruct: str,
         redis_store: RedisChatHistory,
+        chat_config: ChatConfig,
     ):
         self.search_article = SearchArticle(qdrant_config, embedding_config)
         self.sys_instruct = sys_instruct
@@ -40,6 +47,7 @@ class LLMClient:
         self.fields_for_frontend = fields_config.fields_for_frontend
         self.fields_for_llm = fields_config.fields_for_llm
         self.redis = redis_store
+        self.chat_config = chat_config
 
         self.client = genai.Client(vertexai=False, api_key=self.api_key)
 
@@ -179,29 +187,41 @@ class LLMClient:
     def contains_disallowed_tags(text: str) -> bool:
         return any(sub in text for sub in [start_tag_logs, end_tag_logs, start_tag_info, end_tag_info])
 
+    def _consume_user_message_credit(self, user_id: str) -> tuple[bool, str | None]:
+        """
+        Consumes one message credit for the user if allowed.
+        If user has no remaining credit, return blocked=True and a friendly message.
+        If user is near the limit, return a system warning to inject.
+        """
+        count = self.redis.get_usage_count(user_id)
+        max_allowed = self.chat_config.max_user_messages_per_session
+        remaining = max_allowed - count
+
+        if remaining <= 0:
+            return True, "😕 הגעת למספר ההודעות המרבי לשיחה. רוצה להתחיל שיחה חדשה?"
+
+        self.redis.increment_usage_counter(user_id)
+
+        if remaining <= 3:
+            return False, f"<system>המשתמש יכול לשלוח עוד {remaining} הודעות.</system>"
+
+        return False, None
+
     async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
         last_user_msg = self.redis.pop_last_conversation(user_id)
 
         history = self.redis.load_history(user_id)
-        # # trim trailing model messages
-        # while history and history[-1].role == 'model':
-        #     history.pop()
-        # # find last user message
-        # last_user_msg = None
-        # for content in reversed(history):
-        #     if content.role == 'user':
-        #         last_user_msg = content.parts[0].text
-        #         break
-        # if not last_user_msg:
-        #     raise ValueError(f"No user message found for user_id={user_id}")
-        # stream using shared helper
         async for chunk in self._process_message_stream(last_user_msg, history, user_id, regenerate=True):
             yield chunk
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         """Handle a new user message with full persistence."""
+        blocked, system_warning = self._consume_user_message_credit(user_id)
+        if blocked:
+            yield system_warning
+            return
         history = self.redis.load_history(user_id)
         # stream and capture
         async for chunk in self._process_message_stream(message, history, user_id):

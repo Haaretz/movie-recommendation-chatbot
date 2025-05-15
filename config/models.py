@@ -4,6 +4,14 @@ from typing import List, Literal
 from pydantic import BaseModel, Field
 
 
+class ChatConfig(BaseModel):
+    max_user_messages_per_session: int = 10
+    warn_template: str
+    blocked_message: str
+    long_request: str
+    token_limit: int
+
+
 class FieldsConfig(BaseModel):
     fields_for_frontend: List[str]
     fields_for_llm: List[str]
@@ -33,3 +41,4 @@ class AppConfig(BaseModel):
     qdrant: QdrantConfig
     llm: LLMConfig
     bucket_name: str
+    chat: ChatConfig

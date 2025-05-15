@@ -2,6 +2,7 @@ import yaml
 
 from config.models import (
     AppConfig,
+    ChatConfig,
     EmbeddingConfig,
     FieldsConfig,
     LLMConfig,
@@ -20,6 +21,7 @@ def load_config() -> AppConfig:
         embedding=EmbeddingConfig(**load_yaml_file("config/embedding.yaml")),
         qdrant=QdrantConfig(**load_yaml_file("config/qdrant.yaml")),
         llm=LLMConfig(**load_yaml_file("config/llm.yaml")),
+        chat=ChatConfig(**load_yaml_file("config/chat.yaml")),
         bucket_name="ask_haaretz",
     )
 

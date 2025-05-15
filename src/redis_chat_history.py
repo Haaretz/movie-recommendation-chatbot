@@ -113,3 +113,19 @@ class RedisChatHistory:
                     user_text = parts[0].get("text")
 
         return user_text
+
+    def increment_usage_counter(self, user_id: str) -> int:
+        """
+        Increments the user's message usage counter and returns the new count.
+        """
+        key = f"user_message_count:{user_id}"
+        return self._client.incr(key)
+
+    def get_usage_count(self, user_id: str) -> int:
+        key = f"user_message_count:{user_id}"
+        value = self._client.get(key)
+        return int(value) if value else 0
+
+    def reset_usage_counter(self, user_id: str) -> None:
+        key = f"user_message_count:{user_id}"
+        self._client.delete(key)

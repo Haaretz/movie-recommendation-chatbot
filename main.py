@@ -15,7 +15,6 @@ from google import genai
 from pydantic import BaseModel
 
 from config.loader import load_config
-from constant import LONG_REQUEST
 from logger import logger
 from src.llm_api_client import LLMClient
 from src.redis_chat_history import RedisChatHistory
@@ -145,13 +144,15 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     # ----------------------------------------------------------------------- #
     # Use the model name from our client instead of hard‑coding it
     # ----------------------------------------------------------------------- #
-    model_for_count = llm_client_instance.model_name
+    chat_config = llm_client_instance.chat_config
 
     # Token limit check (hard limit: 150 tokens)
-    token_count = genai_client.models.count_tokens(model=model_for_count, contents=user_message).total_tokens
+    token_count = genai_client.models.count_tokens(
+        model=llm_client_instance.model_name, contents=user_message
+    ).total_tokens
 
-    if token_count > 200:
-        return LONG_REQUEST
+    if token_count > chat_config.token_limit:
+        return chat_config.long_request
 
     return StreamingResponse(
         stream_llm_response(user_message, user_id),
