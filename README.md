@@ -28,6 +28,7 @@ A **streaming recommendation assistant** for movies & TV built with **FastAPI, G
     ```bash
     curl -k -X POST https://movie-chat.stage.haaretz.co.il/regenerate \
      -H "Content-Type: application/json" \
-     -d '{"user_id": "roei_dev"}' \
+     -d '{"user_id": "user_123"}' \
      --no-buffer
      ```
+     *Expected Output* A stream of text chunks forming the chatbot's response, following the last message in the chat history.
