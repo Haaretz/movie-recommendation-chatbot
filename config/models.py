@@ -11,6 +11,7 @@ class ChatConfig(BaseModel):
     blocked_message: str
     long_request: str
     token_limit: int
+    chat_ttl_seconds: int
 
 
 class FieldsConfig(BaseModel):

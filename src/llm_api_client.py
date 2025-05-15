@@ -426,7 +426,7 @@ async def main_cli():
         qdrant_config=app_config.qdrant,
         fields_config=app_config.fields,
         sys_instruct=sys_instruct,
-        redis_store=RedisChatHistory(),
+        redis_store=RedisChatHistory(app_config.chat.chat_ttl_seconds),
         chat_config=app_config.chat,
     )
 
@@ -445,8 +445,8 @@ async def main_cli():
             print(chunk, end="", flush=True)
         print()
 
-        async for chunk in llm_client.regenerate_response(user_id=counter):
-            print(chunk, end="", flush=True)
+        # async for chunk in llm_client.regenerate_response(user_id=counter):
+        #     print(chunk, end="", flush=True)
 
         print()
 

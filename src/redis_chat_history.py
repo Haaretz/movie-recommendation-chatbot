@@ -11,13 +11,14 @@ from logger import logger
 class RedisChatHistory:
     """Encapsulates all Redis persistence logic, now preserving function_call parts."""
 
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, ttl_seconds: Optional[int], redis_url: Optional[str] = None) -> None:
         redis_url = redis_url or os.getenv("REDIS_URL")
         if not redis_url:
             raise EnvironmentError("REDIS_URL environment variable is not set and no URL was provided.")
 
         self._client: redis.Redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self._client.ping()
+        self.ttl_seconds = ttl_seconds
         logger.info("Successfully connected to Redis.")
 
     def load_history(self, user_id: str) -> List[Content]:
@@ -36,6 +37,7 @@ class RedisChatHistory:
         key = f"chat_history:{user_id}"
         serialized = self._serialize_message(message)
         self._client.rpush(key, serialized)
+        self._client.expire(key, self.ttl_seconds)
 
     def _serialize_message(self, message: Content) -> str:
         """
@@ -119,6 +121,7 @@ class RedisChatHistory:
         Increments the user's message usage counter and returns the new count.
         """
         key = f"user_message_count:{user_id}"
+        self._client.expire(key, self.ttl_seconds)
         return self._client.incr(key)
 
     def get_usage_count(self, user_id: str) -> int:

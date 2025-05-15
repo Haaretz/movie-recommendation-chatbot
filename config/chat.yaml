@@ -1,4 +1,4 @@
-max_user_messages_per_session: 2
+max_user_messages_per_session: 10
 warn_template: "<system>The user can send {remaining} more messages. Politely warn the user.</system>"
 warn_last_message: "<system>This is the final message the assistant will send in this conversation. Please say goodbye warmly and invite the user to start a new conversation if they wish. Do not assume continued dialogue.</system>"
 blocked_message: "😕 הגעת למספר ההודעות המרבי לשיחה. רוצה להתחיל שיחה חדשה?"
@@ -9,3 +9,4 @@ long_request: |
   מה בא לך לראות? סדרה או סרט? ז'אנר מסוים? מצב רוח?
   """"
 token_limit: 200
+chat_ttl_seconds: 1800 # 30 minutes

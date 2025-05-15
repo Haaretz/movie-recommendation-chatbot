@@ -45,7 +45,8 @@ def create_llm_client_and_model():
         qdrant_config=app_config.qdrant,
         fields_config=app_config.fields,
         sys_instruct=sys_instruct,
-        redis_store=RedisChatHistory(),
+        redis_store=RedisChatHistory(app_config.chat.chat_ttl_seconds),
+        chat_config=app_config.chat,
     )
 
     # Also return raw genai client (used for token counting)
