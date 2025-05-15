@@ -72,7 +72,7 @@ class LLMClient:
         logger.debug("Translated query to Hebrew: '%s'", translated)
         return translated
 
-    def _filter_fields_and_call_tool(self, function_calls):
+    def _filter_fields_and_call_tool(self, function_calls, message: str):
         """
         Process function calls, route to appropriate handlers, and return
         the response parts, frontend metadata, and raw search results.
@@ -82,7 +82,7 @@ class LLMClient:
 
         for call in function_calls:
             if call.name == "get_dataset_articles":
-                handler_parts, search_results = self._handle_get_dataset_articles(call)
+                handler_parts, search_results = self._handle_get_dataset_articles(call, message)
                 parts.extend(handler_parts)
             elif call.name == "trigger_troll_response":
                 handler_parts, search_results = self._handle_trigger_troll_response(call)
@@ -100,7 +100,7 @@ class LLMClient:
 
         return parts, metadata
 
-    def _handle_get_dataset_articles(self, call):
+    def _handle_get_dataset_articles(self, call, message: str):
         """
         Handle 'get_dataset_articles' calls by performing the search and
         formatting the response part.
@@ -110,6 +110,10 @@ class LLMClient:
         streaming = args.get("streaming_platforms", None)
         genres = args.get("genres", None)
         media_type = args.get("media_type", None)
+
+        if not query:
+            logger.warning("No query provided for get_dataset_articles")
+            query = message
 
         logger.info(
             "Executing get_dataset_articles with query=%s, streaming=%s, genres=%s, media_type=%s",
@@ -274,7 +278,7 @@ class LLMClient:
         if collected_calls:
             involved_fc = True
             rag_start = time.time()
-            parts, metadata = self._filter_fields_and_call_tool(collected_calls)
+            parts, metadata = self._filter_fields_and_call_tool(collected_calls, message)
             rag_duration = time.time() - rag_start
 
             if metadata:
