@@ -80,6 +80,10 @@ class ChatMessage(BaseModel):
     user_id: str
 
 
+class UserIdOnly(BaseModel):
+    user_id: str
+
+
 app = FastAPI(
     title="LLM Streaming Chat API",
     description="API for interacting with the LLM via streaming.",
@@ -157,6 +161,21 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
 
     return StreamingResponse(
         stream_llm_response(user_message, user_id),
+        media_type="text/plain",
+    )
+
+
+@app.post("/regenerate", response_class=StreamingResponse)
+async def handle_regenerate(user_data: UserIdOnly = Body(...)):
+    """
+    POST /regenerate
+    Regenerates the last assistant message based on the last user input.
+    """
+    logger.info("Received regenerate request for user %s", user_data.user_id)
+    user_id = user_data.user_id
+
+    return StreamingResponse(
+        llm_client_instance.regenerate_response(user_id),
         media_type="text/plain",
     )
 
