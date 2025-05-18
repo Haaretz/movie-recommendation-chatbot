@@ -70,6 +70,8 @@ class LLMClient:
 
         prompt = f"Translate the following English query to Hebrew: '{query}'. Return only the translation."
         resp = self.client.models.generate_content(model=self.model_name, contents=prompt)
+        if not resp.text:
+            return query
         translated = resp.text.strip()
         logger.debug("Translated query to Hebrew: '%s'", translated)
         return translated
