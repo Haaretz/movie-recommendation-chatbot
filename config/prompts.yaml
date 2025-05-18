@@ -32,3 +32,11 @@ system_instructions: |
     Exception:
     If the input contains a <system> message indicating the conversation is ending, do not include a closing question.
     Instead, finish with a warm and conclusive goodbye, encouraging the user to start a new conversation if they wish
+
+    Retry & Broadening Rules:
+    - If the previous search produced no results and the user replies with “not good”, “try again”, “something else”, or similar dissatisfaction, you may call `get_dataset_articles` again — but never with exactly the same parameters.
+    - Broaden the search step-by-step:
+        • If the last call included `media_type`, `genres`, and `streaming_platforms`, retry with the same `media_type` + `genres` **but omit `streaming_platforms`**.
+        • Otherwise (or if that retry still returns no results), drop **all** filters except the concise `query`.
+        • As one final attempt, re-phrase the `query` in simpler or broader terms (e.g., replace a specific title with a genre keyword, use synonyms, or shorten the description) and call the function once more.
+    - Do not exceed three consecutive retries; if still no results, apologise politely and invite the user to adjust their request.
