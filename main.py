@@ -105,29 +105,31 @@ app.add_middleware(
 async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator[str, None]:
     """
     Yield chunks of the LLM streaming response.
-    If an error occurs, rebuild the client once and retry.
+    If an error occurs, wait one second and retry indefinitely.
     """
-    global llm_client_instance, client
+    global llm_client_instance, genai_client
 
-    logger.debug("Received streaming request: '%s' for user %s", user_message, user_id)
-    full_response = ""
+    while True:
+        logger.debug("Streaming request: '%s' for user %s", user_message, user_id)
+        full_response = ""
 
-    try:
-        async for chunk in llm_client_instance.streaming_message(user_message, user_id):
-            yield chunk
-            await asyncio.sleep(0)
-            full_response += chunk
-        logger.debug("Final response: '%s'", full_response)
+        try:
+            async for chunk in llm_client_instance.streaming_message(user_message, user_id):
+                yield chunk
+                await asyncio.sleep(0)
+                full_response += chunk
 
-    except Exception as e:
-        logger.error("LLMClient error: %s. Reinitializing client and retrying once.", e)
-        llm_client_instance, client = create_llm_client_and_model()
+            logger.debug("Final response: '%s'", full_response)
+            # Successful completion, exit retry loop
+            return
 
-        full_response_retry = ""
-        async for chunk in llm_client_instance.streaming_message(user_message, user_id):
-            yield chunk
-            full_response_retry += chunk
-        logger.debug("Final response after retry: '%s'", full_response_retry)
+        except Exception as e:
+            logger.error("LLMClient error: %s. Reinitializing client and retrying.", e)
+            # Reinitialize client
+            llm_client_instance, genai_client = create_llm_client_and_model()
+            # Wait before next retry
+            await asyncio.sleep(1)
+            # Loop continues indefinitely
 
 
 # --------------------------------------------------------------------------- #
