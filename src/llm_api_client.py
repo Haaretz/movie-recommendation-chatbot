@@ -9,6 +9,7 @@ from google.genai.types import Content, FunctionCall, Part
 
 from config.models import (
     ChatConfig,
+    ChatContext,
     EmbeddingConfig,
     FieldsConfig,
     LLMConfig,
@@ -73,7 +74,7 @@ class LLMClient:
         logger.debug("Translated query to Hebrew: '%s'", translated)
         return translated
 
-    def _filter_fields_and_call_tool(self, function_calls, message: str):
+    def _filter_fields_and_call_tool(self, function_calls, ctx: ChatContext):
         """
         Process function calls, route to appropriate handlers, and return
         the response parts, frontend metadata, and raw search results.
@@ -83,7 +84,7 @@ class LLMClient:
 
         for call in function_calls:
             if call.name == "get_dataset_articles":
-                handler_parts, search_results = self._handle_get_dataset_articles(call, message)
+                handler_parts, search_results = self._handle_get_dataset_articles(call, ctx)
                 parts.extend(handler_parts)
             elif call.name == "trigger_troll_response":
                 handler_parts, search_results = self._handle_trigger_troll_response(call)
@@ -101,7 +102,7 @@ class LLMClient:
 
         return parts, metadata
 
-    def _handle_get_dataset_articles(self, call, message: str):
+    def _handle_get_dataset_articles(self, call, ctx: ChatContext):
         """
         Handle 'get_dataset_articles' calls by performing the search and
         formatting the response part.
@@ -114,7 +115,7 @@ class LLMClient:
 
         if not query:
             logger.warning("No query provided for get_dataset_articles")
-            query = message
+            query = ctx.message
 
         logger.info(
             "Executing get_dataset_articles with query=%s, streaming=%s, genres=%s, media_type=%s",
@@ -126,7 +127,7 @@ class LLMClient:
 
         translated_query = self._translate_english_query(query)
         search_results = self.search_article.retrieve_relevant_documents(
-            translated_query, streaming, genres, media_type
+            translated_query, streaming, genres, media_type, ctx.seen
         )
 
         if not search_results:
@@ -215,6 +216,25 @@ class LLMClient:
 
         return False, None
 
+    @staticmethod
+    def _extract_seen_article_ids(history: List[Content]) -> set[str]:
+        """
+        Given a Redis-loaded chat history, pull out all the article IDs
+        returned by previous get_dataset_articles calls.
+        """
+        seen_ids: set[str] = set()
+        for content in history:
+            for part in content.parts:
+                # only function_response parts have .function_response
+                fc = getattr(part, "function_response", None)
+                if fc and fc.name == "get_dataset_articles":
+                    # assume response is {"content": [{... "id": ...}, ...]}
+                    for item in fc.response.get("content", []):
+                        article_id = item.get("article_id")
+                        if article_id:
+                            seen_ids.add(article_id)
+        return seen_ids
+
     async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
@@ -245,14 +265,20 @@ class LLMClient:
             message = f"{system_warning}\n{message}"
 
         history = self.redis.load_history(user_id)
+        seen = self._extract_seen_article_ids(history)
 
-        async for chunk in self._process_message_stream(message, history, user_id):
+        ctx = ChatContext(
+            user_id=user_id,
+            message=message,
+            history=history,
+            seen=seen,
+        )
+
+        async for chunk in self._process_message_stream(ctx):
             yield chunk
 
-    async def _process_message_stream(
-        self, message: str, history: List[Content], user_id: str, regenerate: bool = False
-    ) -> AsyncGenerator[str, None]:
-        chat = self._create_chat_session(history=history)
+    async def _process_message_stream(self, ctx: ChatContext, regenerate: bool = False) -> AsyncGenerator[str, None]:
+        chat = self._create_chat_session(history=ctx.history)
         full_reply = ""
         collected_calls: List[FunctionCall] = []
         involved_fc = False
@@ -264,7 +290,7 @@ class LLMClient:
 
         # --- Step 1: Stream initial LLM response ---
         llm_start = time.time()
-        async for chunk in self._stream_llm_response(chat, message, collected_calls):
+        async for chunk in self._stream_llm_response(chat, ctx.message, collected_calls):
             if chunk == "DISALLOWED_TAGS":
                 yield "Error: Disallowed tags detected in the response."
                 return
@@ -279,7 +305,7 @@ class LLMClient:
         if collected_calls:
             involved_fc = True
             rag_start = time.time()
-            parts, metadata = self._filter_fields_and_call_tool(collected_calls, message)
+            parts, metadata = self._filter_fields_and_call_tool(collected_calls, ctx)
             rag_duration = time.time() - rag_start
 
             if metadata:
@@ -295,7 +321,7 @@ class LLMClient:
             llm_followup_duration = time.time() - llm_followup_start
 
         # --- Step 3: Save to Redis and log ---
-        self._save_chat(message, involved_fc, full_reply, user_id, parts if involved_fc else None)
+        self._save_chat(ctx.message, involved_fc, full_reply, ctx.user_id, parts if involved_fc else None)
         total_duration = time.time() - total_start
 
         durations = {
@@ -306,12 +332,12 @@ class LLMClient:
         }
 
         yield self._generate_logs(
-            message=message,
-            user_id=user_id,
+            message=ctx.message,
+            user_id=ctx.user_id,
             model=self.model_name,
             collected_calls=collected_calls,
             full_reply=full_reply,
-            history=history,
+            history=ctx.history,
             involved_fc=involved_fc,
             parts=parts if involved_fc else None,
             durations=durations,

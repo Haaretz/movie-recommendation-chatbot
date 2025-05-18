@@ -18,3 +18,4 @@ fields_for_llm:
   - writer_name
   - publish_time
   - text
+  - article_id

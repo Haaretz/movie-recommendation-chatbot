@@ -40,8 +40,12 @@ class SearchArticle(QdrantClientManager, Embedding):
         streaming: list[str],
         genres: list[str],
         review_type: str,
+        seen_ids: set[str],
     ) -> models.Filter:
         must_conditions = []
+        must_not_conditions = []
+
+        # --- Step 1: Create must conditions based on input parameters ---
 
         if streaming:
             must_conditions.append(
@@ -57,11 +61,23 @@ class SearchArticle(QdrantClientManager, Embedding):
 
         must_conditions.append(models.FieldCondition(key="create_by_AI", match=models.MatchValue(value=False)))
 
+        # --- Step 2: Create must_not conditions based on seen_ids ---
+
+        if seen_ids:
+            must_not_conditions.append(
+                models.FieldCondition(
+                    key="id",  # or "payload.article_id" if that's where your ID lives
+                    match=models.MatchAny(any=list(seen_ids)),
+                )
+            )
+
         qdrant_filter = models.Filter(must=must_conditions)
 
         return qdrant_filter
 
-    def retrieve_relevant_documents(self, query: str, streaming: list[str], genres: list[str], review_type: str) -> str:
+    def retrieve_relevant_documents(
+        self, query: str, streaming: list[str], genres: list[str], review_type: str, seen_ids: set[str]
+    ) -> str:
         """
         Retrieve relevant documents from Qdrant using vector search and payload filters.
 
@@ -83,7 +99,7 @@ class SearchArticle(QdrantClientManager, Embedding):
         """
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter(streaming, genres, review_type)
+        qdrant_filter = self._create_qdrant_filter(streaming, genres, review_type, seen_ids)
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
 
@@ -92,8 +108,7 @@ class SearchArticle(QdrantClientManager, Embedding):
                 collection_name=self.qdrant_collection_name,
                 query_vector=query_embedding_vector,
                 limit=self.SEARCH_LIMIT,
-                # score_threshold=self.MIN_SCORE_THRESHOLD,
-                score_threshold=0.6,
+                score_threshold=self.MIN_SCORE_THRESHOLD,
                 query_filter=qdrant_filter,
                 search_params=search_params,
             )

@@ -1,7 +1,17 @@
 import os
-from typing import List, Literal
+from dataclasses import dataclass
+from typing import List, Literal, Set
 
+from google.genai.types import Content
 from pydantic import BaseModel, Field
+
+
+@dataclass
+class ChatContext:
+    history: List[Content]
+    seen: Set[str]
+    message: str
+    user_id: str
 
 
 class ChatConfig(BaseModel):
