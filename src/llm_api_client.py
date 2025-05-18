@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from typing import AsyncGenerator, List, Optional
 
@@ -337,12 +338,31 @@ class LLMClient:
                 collected_calls.append(func_call)
 
     async def _stream_llm_followup(self, chat, parts: List[Part]) -> AsyncGenerator[str, None]:
+        self._in_thinking_process = False
+
         for chunk in chat.send_message_stream(parts):
             if chunk.text:
-                if self.contains_disallowed_tags(chunk.text):
+                text = chunk.text
+
+                # Detect start of Thinking Process block
+                if text.startswith("Thinking Process"):
+                    self._in_thinking_process = True
+                    logger.warning("Thinking Process started")
+
+                # If inside Thinking Process, always yield until Hebrew after any newline
+                if self._in_thinking_process:
+                    # End Thinking Process when a newline is followed by Hebrew text anywhere in this chunk
+                    if re.search(r"\n[\u0590-\u05FF\uFB1D-\uFB4F]", text):
+                        self._in_thinking_process = False
+                    yield text
+                    continue
+
+                # Normal disallowed tags handling
+                if self.contains_disallowed_tags(text):
                     yield "DISALLOWED_TAGS"
                     return
-                yield chunk.text
+
+                yield text
 
     def _generate_logs(
         self,
