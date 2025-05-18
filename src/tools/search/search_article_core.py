@@ -66,12 +66,12 @@ class SearchArticle(QdrantClientManager, Embedding):
         if seen_ids:
             must_not_conditions.append(
                 models.FieldCondition(
-                    key="id",  # or "payload.article_id" if that's where your ID lives
+                    key="article_id",  # or "payload.article_id" if that's where your ID lives
                     match=models.MatchAny(any=list(seen_ids)),
                 )
             )
 
-        qdrant_filter = models.Filter(must=must_conditions)
+        qdrant_filter = models.Filter(must=must_conditions, must_not=must_not_conditions)
 
         return qdrant_filter
 
