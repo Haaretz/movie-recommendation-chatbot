@@ -230,9 +230,10 @@ class LLMClient:
                 if fc and fc.name == "get_dataset_articles":
                     # assume response is {"content": [{... "id": ...}, ...]}
                     for item in fc.response.get("content", []):
-                        article_id = item.get("article_id")
-                        if article_id:
-                            seen_ids.add(article_id)
+                        if isinstance(item, dict):
+                            article_id = item.get("article_id")
+                            if article_id:
+                                seen_ids.add(article_id)
         return seen_ids
 
     async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:

@@ -199,7 +199,7 @@ async def version():
     GET /version
     Returns the API version.
     """
-    return {"version": "0.0.1"}
+    return {"version": "0.1.0"}
 
 
 # --------------------------------------------------------------------------- #
