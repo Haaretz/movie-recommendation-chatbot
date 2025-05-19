@@ -12,7 +12,6 @@ class SearchArticle(QdrantClientManager, Embedding):
 
     HNSW_EF = 128
     SCROLL_LIMIT = 10
-    _num_results_retrieved = 5
 
     def __init__(self, qdrant_config: QdrantConfig, embedding_config: EmbeddingConfig):
         """Initialize SearchArticle with structured configs."""
@@ -76,26 +75,6 @@ class SearchArticle(QdrantClientManager, Embedding):
 
         return qdrant_filter
 
-    def _order_search_results_by_date(
-        self, search_result: List[Union[models.ScoredPoint, models.PointStruct]]
-    ) -> List[Union[models.ScoredPoint, models.PointStruct]]:
-        """
-        Order search results by publish_time in descending order.
-
-        Args:
-            search_result: List of search results (either ScoredPoint or PointStruct).
-
-        Returns:
-            Ordered list of search results.
-        """
-        # Sort the results based on the publish_time field in descending order
-        sorted_results = sorted(
-            search_result,
-            key=lambda x: x.payload.get("publish_time", ""),
-            reverse=True,
-        )
-        return sorted_results[: self.SEARCH_LIMIT]
-
     def retrieve_relevant_documents(
         self, query: str, streaming: list[str], genres: list[str], review_type: str, seen_ids: set[str]
     ) -> str:
@@ -128,12 +107,11 @@ class SearchArticle(QdrantClientManager, Embedding):
             search_result = self.client_qdrant.search(
                 collection_name=self.qdrant_collection_name,
                 query_vector=query_embedding_vector,
-                limit=self._num_results_retrieved,
+                limit=self.SEARCH_LIMIT,
                 score_threshold=self.MIN_SCORE_THRESHOLD,
                 query_filter=qdrant_filter,
                 search_params=search_params,
             )
-            search_result = self._order_search_results_by_date(search_result)
         except Exception as e:
             logger.error(f"Error in search: {e}")
             logger.exception(e)
@@ -163,6 +141,5 @@ if __name__ == "__main__":
         streaming=[],
         genres=[],
         review_type="movie",
-        seen_ids=set(),
     )
     print(result)

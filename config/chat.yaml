@@ -1,6 +1,6 @@
 max_user_messages_per_session: 20
-warn_template: "<system>The user can send {remaining} more messages. Use **bold text** to emphasize the warning. Politely warn the user.</system>"
-warn_last_message: "<system>This is the final message the assistant will send in this conversation. Use **bold** text to convey this to the user. Say goodbye warmly and invite the user to start a new conversation.</system>"
+warn_template: "<system>The user can send {remaining} more messages. Politely warn the user.</system>"
+warn_last_message: "<system>This is the final message the assistant will send in this conversation. Please say goodbye warmly and invite the user to start a new conversation if they wish. Do not assume continued dialogue.</system>"
 blocked_message: "😕 הגעת למספר ההודעות המרבי לשיחה. רוצה להתחיל שיחה חדשה?"
 long_request: |
   """

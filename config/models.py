@@ -12,7 +12,6 @@ class ChatContext:
     seen: Set[str]
     message: str
     user_id: str
-    remaining_user_messages: int
 
 
 class ChatConfig(BaseModel):

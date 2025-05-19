@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from typing import AsyncGenerator, List, Optional
 
@@ -49,7 +50,6 @@ class LLMClient:
         self.fields_for_llm = fields_config.fields_for_llm
         self.redis = redis_store
         self.chat_config = chat_config
-        self.user_quota = chat_config.max_user_messages_per_session
 
         self.client = genai.Client(vertexai=False, api_key=self.api_key)
 
@@ -197,29 +197,28 @@ class LLMClient:
     def contains_disallowed_tags(text: str) -> bool:
         return any(sub in text for sub in [start_tag_logs, end_tag_logs, start_tag_info, end_tag_info])
 
-    def _get_message_quota(self, user_id: str) -> tuple[int, str | None]:
+    def _consume_user_message_credit(self, user_id: str) -> tuple[bool, str | None]:
         """
-        Consume one message credit for the user.
-        Returns:
-          - blocked (bool): True if user is out of credits.
-          - warning (str|None): A warning or blocked message to show.
-          - is_last_allowed (bool): True if this is the user's final allowed message.
+        Consumes one message credit for the user if allowed.
+        If user has no remaining credit, return blocked=True and a friendly message.
+        If user is near the limit, return a system warning to inject.
         """
-        used = self.redis.get_usage_count(user_id)
-        remaining = self.user_quota - used
+        count = self.redis.get_usage_count(user_id)
+        max_allowed = self.chat_config.max_user_messages_per_session
+        remaining = max_allowed - count
 
         if remaining <= 0:
-            return remaining, self.chat_config.blocked_message
+            return True, self.chat_config.blocked_message
 
         self.redis.increment_usage_counter(user_id)
 
         if remaining == 1:
-            return remaining, self.chat_config.warn_last_message
+            return False, self.chat_config.warn_last_message
 
         if remaining <= 3:
-            return remaining, self.chat_config.warn_template.format(remaining=remaining - 1)
+            return False, self.chat_config.warn_template.format(remaining=remaining - 1)
 
-        return remaining, None
+        return False, None
 
     @staticmethod
     def _extract_seen_article_ids(history: List[Content]) -> set[str]:
@@ -261,59 +260,27 @@ class LLMClient:
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
         """Handle a new user message with full persistence."""
-        remaining, warning = self._get_message_quota(user_id)
-        if remaining == 0:
-            yield warning
+        blocked, system_warning = self._consume_user_message_credit(user_id)
+        if blocked:
+            yield system_warning
             return
 
-        # Prepend warning if needed
-        full_message = f"{warning}\n{message}" if warning else message
+        # Inject warning into the message itself
+        if system_warning:
+            message = f"{system_warning}\n{message}"
 
         history = self.redis.load_history(user_id)
         seen = self._extract_seen_article_ids(history)
 
         ctx = ChatContext(
             user_id=user_id,
-            message=full_message,
+            message=message,
             history=history,
             seen=seen,
-            remaining_user_messages=remaining,
         )
 
         async for chunk in self._process_message_stream(ctx):
             yield chunk
-
-    @staticmethod
-    def _wrap_info(teaser: dict, last_message: bool = False) -> str:
-        if last_message:
-            payload = {"teasers": teaser, "system": {"last_message": True}}
-        else:
-            payload = {"teasers": teaser, "system": {"last_message": False}}
-        return f"{start_tag_info}{json.dumps(payload, ensure_ascii=False)}{end_tag_info}"
-
-    @staticmethod
-    def _convert_streaming_markdown_bold(text: str, bold_open: bool) -> tuple[str, bool]:
-        """
-        Scan `text` for '**', toggling between opening and closing <strong> tags.
-        Returns the converted text and updated bold_open state.
-        """
-        parts = text.split("**")
-        # if there are no '**', nothing changes
-        if len(parts) == 1:
-            return text, bold_open
-
-        out = []
-        for i, segment in enumerate(parts):
-            out.append(segment)
-            # after every segment except the last, inject a tag
-            if i < len(parts) - 1:
-                if bold_open:
-                    out.append("</strong>")
-                else:
-                    out.append("<strong>")
-                bold_open = not bold_open
-
-        return "".join(out), bold_open
 
     async def _process_message_stream(self, ctx: ChatContext, regenerate: bool = False) -> AsyncGenerator[str, None]:
         chat = self._create_chat_session(history=ctx.history)
@@ -336,9 +303,6 @@ class LLMClient:
             yield chunk
         llm_initial_duration = time.time() - llm_start
 
-        if len(collected_calls) == 0 and ctx.remaining_user_messages == 1:
-            yield self._wrap_info({}, True)
-
         # --- Step 2: Handle Function Calls ---
         parts = None
         metadata = None
@@ -349,10 +313,8 @@ class LLMClient:
             parts, metadata = self._filter_fields_and_call_tool(collected_calls, ctx)
             rag_duration = time.time() - rag_start
 
-            if metadata and ctx.remaining_user_messages == 1:
-                yield self._wrap_info(metadata, last_message=True)
-            elif metadata:
-                yield self._wrap_info(metadata, last_message=False)
+            if metadata:
+                yield start_tag_info + metadata + end_tag_info
 
             llm_followup_start = time.time()
             async for chunk in self._stream_llm_followup(chat, parts):
@@ -372,7 +334,6 @@ class LLMClient:
             "rag": rag_duration,
             "llm_followup": llm_followup_duration,
             "total": total_duration,
-            "remaining_user_messages": ctx.remaining_user_messages,
         }
 
         yield self._generate_logs(
@@ -391,30 +352,12 @@ class LLMClient:
     async def _stream_llm_response(
         self, chat, message: str, collected_calls: List[FunctionCall]
     ) -> AsyncGenerator[str, None]:
-        bold_open = False
-        # _in_thinking_process = False
-
         for chunk in chat.send_message_stream(message):
             if chunk.text:
                 if self.contains_disallowed_tags(chunk.text):
                     yield "DISALLOWED_TAGS"
                     return
-
-                # Detect start of Thinking Process block
-                # if 'Thinking Process' in chunk.text:
-                #     _in_thinking_process = True
-                #     logger.warning("Thinking Process started")
-
-                # # If inside Thinking Process, always yield until Hebrew after any newline
-                # if _in_thinking_process:
-                #     # End Thinking Process when a newline is followed by Hebrew text anywhere in this chunk
-                #     if re.search(r"\n[\u0590-\u05FF\uFB1D-\uFB4F]", chunk.text):
-                #         _in_thinking_process = False
-                #     yield chunk.text
-                #     continue
-
-                converted, bold_open = self._convert_streaming_markdown_bold(chunk.text, bold_open)
-                yield converted
+                yield chunk.text
 
             func_call = (
                 chunk.candidates
@@ -426,33 +369,31 @@ class LLMClient:
                 collected_calls.append(func_call)
 
     async def _stream_llm_followup(self, chat, parts: List[Part]) -> AsyncGenerator[str, None]:
-        # _in_thinking_process = False
-        bold_open = False
+        self._in_thinking_process = False
 
         for chunk in chat.send_message_stream(parts):
             if chunk.text:
                 text = chunk.text
 
                 # Detect start of Thinking Process block
-                # if text.startswith("Thinking Process"):
-                #     self._in_thinking_process = True
-                #     logger.warning("Thinking Process started")
+                if text.startswith("Thinking Process"):
+                    self._in_thinking_process = True
+                    logger.warning("Thinking Process started")
 
-                # # If inside Thinking Process, always yield until Hebrew after any newline
-                # if _in_thinking_process:
-                #     # End Thinking Process when a newline is followed by Hebrew text anywhere in this chunk
-                #     if re.search(r"\n[\u0590-\u05FF\uFB1D-\uFB4F]", text):
-                #         _in_thinking_process = False
-                #     yield text
-                #     continue
+                # If inside Thinking Process, always yield until Hebrew after any newline
+                if self._in_thinking_process:
+                    # End Thinking Process when a newline is followed by Hebrew text anywhere in this chunk
+                    if re.search(r"\n[\u0590-\u05FF\uFB1D-\uFB4F]", text):
+                        self._in_thinking_process = False
+                    yield text
+                    continue
 
                 # Normal disallowed tags handling
                 if self.contains_disallowed_tags(text):
                     yield "DISALLOWED_TAGS"
                     return
 
-                converted, bold_open = self._convert_streaming_markdown_bold(chunk.text, bold_open)
-                yield converted
+                yield text
 
     def _generate_logs(
         self,
@@ -490,7 +431,6 @@ class LLMClient:
                 "troll_triggered": troll_triggered,
                 "total_time": durations.get("total", 0),
                 "regenerate": regenerate,
-                "remaining_user_messages": durations.get("remaining_user_messages", 0),
             }
         }
         return start_tag_logs + json.dumps(logs, ensure_ascii=False) + end_tag_logs
