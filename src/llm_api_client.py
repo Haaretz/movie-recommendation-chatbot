@@ -142,8 +142,8 @@ class LLMClient:
 
         # Convert results for LLM
         content_list = [{k: item.get(k) for k in self.fields_for_llm} for item in search_results]
-        for d in content_list:
-            d.pop("article_id", None)  # remove article_id from the response. unnecessary for LLM
+        # for d in content_list:
+        #     d.pop('article_id', None) # remove article_id from the response. unnecessary for LLM
         part = Part.from_function_response(name=call.name, response={"content": content_list})
         return [part], search_results
 

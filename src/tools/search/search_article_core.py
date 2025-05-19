@@ -118,6 +118,10 @@ class SearchArticle(QdrantClientManager, Embedding):
             return "qdrant search error"
         # search_result = self._filter_search_results_by_score(search_result)
         documents = self._extract_and_translate_payload_from_points(search_result)
+        logger.info(f"ids seen: {seen_ids}")
+        recevied = [d["article_id"] for d in documents]
+        logger.info(f"search result: {recevied}")
+        logger.info(f"does seen in received: {seen_ids.intersection(recevied)}")
 
         return documents
 
