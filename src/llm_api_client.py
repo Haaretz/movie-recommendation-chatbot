@@ -97,11 +97,7 @@ class LLMClient:
         # Prepare metadata for frontend if we have list results
         metadata = None
         if isinstance(search_results, list):
-            metadata = json.dumps(
-                [{k: item.get(k, None) for k in self.fields_for_frontend} for item in search_results],
-                ensure_ascii=False,
-            )
-
+            metadata = [{k: item.get(k, None) for k in self.fields_for_frontend} for item in search_results]
         return parts, metadata
 
     def _handle_get_dataset_articles(self, call, ctx: ChatContext):
@@ -244,19 +240,18 @@ class LLMClient:
     async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
-        blocked, system_warning = self._consume_user_message_credit(user_id)
+        blocked, warning = self._get_message_quota(user_id)
         if blocked:
-            yield system_warning
+            yield warning
             return
 
-        last_user_msg = self.redis.pop_last_conversation(user_id)
+        message = self.redis.pop_last_conversation(user_id)
 
         # Inject warning into the message itself
-        if system_warning:
-            last_user_msg = f"{system_warning}\n{last_user_msg}"
+        full_message = f"{warning}\n{message}" if warning else message
 
         history = self.redis.load_history(user_id)
-        async for chunk in self._process_message_stream(last_user_msg, history, user_id, regenerate=True):
+        async for chunk in self._process_message_stream(full_message, history, user_id, regenerate=True):
             yield chunk
 
     async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
@@ -337,7 +332,7 @@ class LLMClient:
         llm_initial_duration = time.time() - llm_start
 
         if len(collected_calls) == 0 and ctx.remaining_user_messages == 1:
-            yield self._wrap_info({}, True)
+            yield self._wrap_info({}, last_message=True)
 
         # --- Step 2: Handle Function Calls ---
         parts = None
