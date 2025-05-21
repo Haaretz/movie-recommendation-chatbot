@@ -23,6 +23,7 @@ class ChatConfig(BaseModel):
     long_request: str
     token_limit: int
     chat_ttl_seconds: int
+    non_paying_messages: str
 
 
 class FieldsConfig(BaseModel):

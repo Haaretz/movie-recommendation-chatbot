@@ -177,7 +177,7 @@ async def handle_chat_stream(
     # If not a paying user, return friendly upgrade message
     if not token_data or token_data.get("userType") != "paying":
         return StreamingResponse(
-            iter([chat_config.non_paying_message]),
+            iter([chat_config.non_paying_messages]),
             media_type="text/plain",
             status_code=200,
         )
@@ -216,7 +216,7 @@ async def handle_regenerate(
     # If not a paying user, return friendly upgrade message
     if not token_data or token_data.get("userType") != "paying":
         return StreamingResponse(
-            iter([chat_config.non_paying_message]),
+            iter([chat_config.non_paying_messages]),
             media_type="text/plain",
             status_code=200,
         )
