@@ -106,13 +106,13 @@ class ChatMessage(BaseModel):
     """Schema for a single chat message arriving from the front-end."""
 
     message: str
-    user_id: str
+    session_id: str
 
 
 class UserIdOnly(BaseModel):
     """Schema for regenerate endpoint."""
 
-    user_id: str
+    session_id: str
 
 
 app = FastAPI(
@@ -133,7 +133,7 @@ app.add_middleware(
 # --------------------------------------------------------------------------- #
 # Streaming helper
 # --------------------------------------------------------------------------- #
-async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator[str, None]:
+async def stream_llm_response(user_message: str, session_id: str) -> AsyncGenerator[str, None]:
     """
     Yield chunks of the LLM streaming response.
     If an error occurs, wait one second and retry indefinitely.
@@ -141,11 +141,11 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
     global llm_client_instance, genai_client
 
     while True:
-        logger.debug("Streaming request: '%s' for user %s", user_message, user_id)
+        logger.debug("Streaming request: '%s' for user %s", user_message, session_id)
         full_response = ""
 
         try:
-            async for chunk in llm_client_instance.streaming_message(user_message, user_id):
+            async for chunk in llm_client_instance.streaming_message(user_message, session_id):
                 yield chunk
                 await asyncio.sleep(0)
                 full_response += chunk
@@ -183,7 +183,9 @@ async def handle_chat_stream(
         )
 
     user_message = chat_message.message
-    user_id = chat_message.user_id
+    session_id = chat_message.session_id
+
+    session_id = f'{token_data["userId"]}_{session_id}'
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -196,7 +198,7 @@ async def handle_chat_stream(
         return chat_config.long_request
 
     return StreamingResponse(
-        stream_llm_response(user_message, user_id),
+        stream_llm_response(user_message, session_id),
         media_type="text/plain",
     )
 
@@ -221,8 +223,11 @@ async def handle_regenerate(
             status_code=200,
         )
 
+    session_id = user_data.session_id
+    session_id = f'{token_data["userId"]}_{session_id}'
+
     return StreamingResponse(
-        llm_client_instance.regenerate_response(user_data.user_id),
+        llm_client_instance.regenerate_response(session_id),
         media_type="text/plain",
     )
 
