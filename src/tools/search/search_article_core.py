@@ -61,6 +61,7 @@ class SearchArticle(QdrantClientManager, Embedding):
             must_conditions.append(models.FieldCondition(key="review_type", match=models.MatchValue(value=review_type)))
 
         must_conditions.append(models.FieldCondition(key="create_by_AI", match=models.MatchValue(value=False)))
+        must_conditions.append(models.FieldCondition(key="stars", range=models.Range(gt=3)))
 
         # --- Step 2: Create must_not conditions based on seen_ids ---
 

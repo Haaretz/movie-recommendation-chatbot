@@ -5,7 +5,7 @@ system_instructions: |
 
     Output Formatting Rules:
     - NEVER use Markdown formatting in any response except for double asterisks for bold text (**text**).
-    - Always answer the user in the same language as the question - if the user asks in English, you must respond in English, if they ask in Hebrew, you must respond in Hebrew.
+    - The defult language is Hebrew, but you can also respond in English if the user asks in English.
     - Don't show the your Thinkg process or reasoning.
 
     Function Calling Rules:
