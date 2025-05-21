@@ -281,9 +281,9 @@ class LLMClient:
     @staticmethod
     def _wrap_info(teaser: dict, last_message: bool = False) -> str:
         if last_message:
-            payload = {"teasers": teaser, "system": {"last_message": "true"}}
+            payload = {"teasers": teaser, "system": {"last_message": True}}
         else:
-            payload = {"teasers": teaser, "system": {"last_message": "false"}}
+            payload = {"teasers": teaser, "system": {"last_message": False}}
         return f"{start_tag_info}{json.dumps(payload, ensure_ascii=False)}{end_tag_info}"
 
     @staticmethod
