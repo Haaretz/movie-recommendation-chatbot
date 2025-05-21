@@ -1,14 +1,18 @@
 """
 Full FastAPI server file – revised so the model name used for
-`count_tokens()` comes from configuration instead of being hard‑coded.
+`count_tokens()` comes from configuration instead of being hard-coded,
+and to enforce that only paying users may call /chat and /regenerate.
 """
 
 import asyncio
+import base64
+import json
 import os
+from http.cookies import SimpleCookie
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from google import genai
@@ -27,8 +31,6 @@ def create_llm_client_and_model():
     """
     Initialize AppConfig and LLMClient.
     """
-
-    # Load full app config (llm, qdrant, embedding, fields)
     app_config = load_config()
 
     # Load system prompt from prompts.yaml
@@ -56,6 +58,33 @@ def create_llm_client_and_model():
 
 
 # --------------------------------------------------------------------------- #
+# Enforce “paying” user (helper)
+# --------------------------------------------------------------------------- #
+def extract_token_data_if_present(request: Request) -> dict | None:
+    """
+    Extracts and decodes the sso_token if present.
+    Returns the decoded token data or None if no token is present.
+    Raises 400 only if the token exists but is badly formatted.
+    """
+    cookie_header = request.headers.get("cookie")
+    if not cookie_header:
+        return None
+
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    if "sso_token" not in cookie:
+        return None
+
+    token_value = cookie["sso_token"].value
+    try:
+        decoded_str = base64.b64decode(token_value).decode("utf-8")
+        token_data = json.loads(decoded_str)
+        return token_data
+    except (ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=400, detail="Invalid sso_token format")
+
+
+# --------------------------------------------------------------------------- #
 # One global instance, created at startup
 # --------------------------------------------------------------------------- #
 llm_client_instance, genai_client = create_llm_client_and_model()
@@ -74,13 +103,15 @@ origins = [
 
 
 class ChatMessage(BaseModel):
-    """Schema for a single chat message arriving from the front‑end."""
+    """Schema for a single chat message arriving from the front-end."""
 
     message: str
     user_id: str
 
 
 class UserIdOnly(BaseModel):
+    """Schema for regenerate endpoint."""
+
     user_id: str
 
 
@@ -120,40 +151,43 @@ async def stream_llm_response(user_message: str, user_id: str) -> AsyncGenerator
                 full_response += chunk
 
             logger.debug("Final response: '%s'", full_response)
-            # Successful completion, exit retry loop
-            return
+            return  # exit after success
 
         except Exception as e:
             logger.error("LLMClient error: %s. Reinitializing client and retrying.", e)
-            # Reinitialize client
             llm_client_instance, genai_client = create_llm_client_and_model()
-            # Wait before next retry
             await asyncio.sleep(1)
-            # Loop continues indefinitely
 
 
 # --------------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------------- #
-@app.post("/chat", response_class=StreamingResponse)
-async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
+@app.post("/chat", response_class=StreamingResponse, summary="Stream chat reply (paying users only)")
+async def handle_chat_stream(
+    request: Request,
+    chat_message: ChatMessage = Body(...),
+):
     """
     POST /chat
-    Validate the request and stream LLM responses in plain text.
+    Validate the request, enforce paying-user, then stream LLM responses in plain text.
     """
-    logger.info("Received chat message: %s", chat_message)
+    token_data = extract_token_data_if_present(request)
+    chat_config = llm_client_instance.chat_config
+
+    # If not a paying user, return friendly upgrade message
+    if not token_data or token_data.get("userType") != "paying":
+        return StreamingResponse(
+            iter([chat_config.non_paying_message]),
+            media_type="text/plain",
+            status_code=200,
+        )
+
     user_message = chat_message.message
     user_id = chat_message.user_id
-
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    # ----------------------------------------------------------------------- #
-    # Use the model name from our client instead of hard‑coding it
-    # ----------------------------------------------------------------------- #
-    chat_config = llm_client_instance.chat_config
-
-    # Token limit check (hard limit: 150 tokens)
+    # Token-limit check using configured model_name
     token_count = genai_client.models.count_tokens(
         model=llm_client_instance.model_name, contents=user_message
     ).total_tokens
@@ -167,17 +201,28 @@ async def handle_chat_stream(chat_message: ChatMessage = Body(...)):
     )
 
 
-@app.post("/regenerate", response_class=StreamingResponse)
-async def handle_regenerate(user_data: UserIdOnly = Body(...)):
+@app.post("/regenerate", response_class=StreamingResponse, summary="Regenerate last reply (paying users only)")
+async def handle_regenerate(
+    request: Request,
+    user_data: UserIdOnly = Body(...),
+):
     """
     POST /regenerate
     Regenerates the last assistant message based on the last user input.
     """
-    logger.info("Received regenerate request for user %s", user_data.user_id)
-    user_id = user_data.user_id
+    token_data = extract_token_data_if_present(request)
+    chat_config = llm_client_instance.chat_config
+
+    # If not a paying user, return friendly upgrade message
+    if not token_data or token_data.get("userType") != "paying":
+        return StreamingResponse(
+            iter([chat_config.non_paying_message]),
+            media_type="text/plain",
+            status_code=200,
+        )
 
     return StreamingResponse(
-        llm_client_instance.regenerate_response(user_id),
+        llm_client_instance.regenerate_response(user_data.user_id),
         media_type="text/plain",
     )
 
@@ -203,7 +248,7 @@ async def version():
 
 
 # --------------------------------------------------------------------------- #
-# Entry‑point when running as a script
+# Entry-point when running as a script
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

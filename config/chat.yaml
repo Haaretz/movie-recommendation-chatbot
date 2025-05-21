@@ -2,6 +2,19 @@ max_user_messages_per_session: 500
 warn_template: "<system>The user can send {remaining} more messages. Use **bold text** to emphasize the warning. Politely warn the user.</system>"
 warn_last_message: "<system>This is the final message the assistant will send in this conversation. Use **bold** text to convey this to the user. Say goodbye warmly and invite the user to start a new conversation.</system>"
 blocked_message: "😕 הגעת למספר ההודעות המרבי לשיחה. רוצה להתחיל שיחה חדשה?"
+non_paying_message: |
+  """
+  רגע רגע… מנסים לקבל המלצות אישיות בלי להיות מנויים?
+  זה כמו לנסות להיכנס לסרט בלי כרטיס 🎬
+  הצ'אט שלנו שמור למנויים בלבד – אבל אל דאגה, כרטיס הכניסה ממש כאן:
+  <a
+    href="https://promotion.haaretz.co.il/offers"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    להצטרפות למנוי &gt;&gt;
+  </a>
+  """
 long_request: |
   """
   וואו, זו שאלה עם הרבה תוכן – יותר מ־200 מילים!
