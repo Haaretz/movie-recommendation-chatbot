@@ -5,7 +5,7 @@ blocked_message: "😕 הגעת למספר ההודעות המרבי לשיחה.
 non_paying_messages: |
   רגע רגע… מנסים לקבל המלצות אישיות בלי להיות מנויים?
   זה כמו לנסות להיכנס לסרט בלי כרטיס 🎬
-  הצ'אט שלנו שמור למנויים בלבד – אבל אל דאגה, כרטיס הכניסה ממש כאן: <a href="https://promotion.haaretz.co.il/offers" target="_blank" rel="noopener noreferrer">להצטרפות למנוי</a>
+  הצ'אט שלנו שמור למנויים בלבד – אבל אל דאגה, כרטיס הכניסה ממש כאן: <a href="https://promotion.haaretz.co.il/offers" target="_blank" rel="noopener noreferrer" style="color: #0645AD; text-decoration: underline;">להצטרפות למנוי</a>
 long_request: |
   וואו, זו שאלה עם הרבה תוכן – יותר מ־200 מילים!
   בשביל שנוכל להמליץ לך על משהו מעולה לראות, נצטרך שתכתבו לנו בקצרה:
