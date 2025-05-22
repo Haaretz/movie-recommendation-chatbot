@@ -147,7 +147,7 @@ async def stream_llm_response(user_message: str, sso_id: str, session_id: str) -
         full_response = ""
 
         try:
-            async for chunk in llm_client_instance.streaming_message(user_message, session_id):
+            async for chunk in llm_client_instance.streaming_message(user_message, session_id, sso_id):
                 yield chunk
                 await asyncio.sleep(0)
                 full_response += chunk

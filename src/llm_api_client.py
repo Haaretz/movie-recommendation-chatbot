@@ -237,26 +237,41 @@ class LLMClient:
                                 seen_ids.add(article_id)
         return seen_ids
 
-    async def regenerate_response(self, user_id: str) -> AsyncGenerator[str, None]:
+    async def regenerate_response(self, sso_id: str, session_id: str) -> AsyncGenerator[str, None]:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
-        blocked, warning = self._get_message_quota(user_id)
+        conversation_key = f"{sso_id}_{session_id}"
+        blocked, warning = self._get_message_quota(conversation_key)
         if blocked:
             yield warning
             return
 
-        message = self.redis.pop_last_conversation(user_id)
+        message = self.redis.pop_last_conversation(conversation_key)
 
         # Inject warning into the message itself
         full_message = f"{warning}\n{message}" if warning else message
 
-        history = self.redis.load_history(user_id)
-        async for chunk in self._process_message_stream(full_message, history, user_id, regenerate=True):
+        history = self.redis.load_history(conversation_key)
+        seen = self._extract_seen_article_ids(history)
+
+        ctx = ChatContext(
+            conversation_key=conversation_key,
+            sso_id=sso_id,
+            session_id=session_id,
+            message=full_message,
+            history=history,
+            seen=seen,
+            remaining_user_messages=blocked,
+        )
+
+        async for chunk in self._process_message_stream(ctx, regenerate=True):
             yield chunk
 
-    async def streaming_message(self, message: str, user_id: str) -> AsyncGenerator[str, None]:
+    async def streaming_message(self, message: str, session_id: str, sso_id: str) -> AsyncGenerator[str, None]:
         """Handle a new user message with full persistence."""
-        remaining, warning = self._get_message_quota(user_id)
+        conversation_key = f"{sso_id}_{session_id}"
+
+        remaining, warning = self._get_message_quota(conversation_key)
         if remaining == 0:
             yield warning
             return
@@ -264,11 +279,13 @@ class LLMClient:
         # Prepend warning if needed
         full_message = f"{warning}\n{message}" if warning else message
 
-        history = self.redis.load_history(user_id)
+        history = self.redis.load_history(conversation_key)
         seen = self._extract_seen_article_ids(history)
 
         ctx = ChatContext(
-            user_id=user_id,
+            conversation_key=conversation_key,
+            sso_id=sso_id,
+            session_id=session_id,
             message=full_message,
             history=history,
             seen=seen,
@@ -359,7 +376,7 @@ class LLMClient:
             llm_followup_duration = time.time() - llm_followup_start
 
         # --- Step 3: Save to Redis and log ---
-        self._save_chat(ctx.message, involved_fc, full_reply, ctx.user_id, parts if involved_fc else None)
+        self._save_chat(ctx.message, involved_fc, full_reply, ctx.conversation_key, parts if involved_fc else None)
         total_duration = time.time() - total_start
 
         durations = {
@@ -371,12 +388,10 @@ class LLMClient:
         }
 
         yield self._generate_logs(
-            message=ctx.message,
-            user_id=ctx.user_id,
+            ctx=ctx,
             model=self.model_name,
             collected_calls=collected_calls,
             full_reply=full_reply,
-            history=ctx.history,
             involved_fc=involved_fc,
             parts=parts if involved_fc else None,
             durations=durations,
@@ -451,30 +466,29 @@ class LLMClient:
 
     def _generate_logs(
         self,
-        *,
-        message: str,
-        user_id: str,
+        ctx: ChatContext,
         model: str,
         collected_calls: List[FunctionCall],
         full_reply: str,
-        history: List[Content],
         involved_fc: bool,
         parts: Optional[List[Part]],
         durations: dict,
         regenerate: bool,
     ) -> str:
-        prior_history = history + [Content(role="user", parts=[Part(text=message)])]
+        prior_history = ctx.history + [Content(role="user", parts=[Part(text=ctx.message)])]
         if involved_fc and parts:
             prior_history += [Content(role="model", parts=parts)]
 
-        token_in, token_out = self.num_tokens(prior_history, new_user_msg=message, assistant_reply=full_reply)
+        token_in, token_out = self.num_tokens(prior_history, new_user_msg=ctx.message, assistant_reply=full_reply)
 
         troll_triggered = any(call.name == "trigger_troll_response" for call in collected_calls)
         logs = {
             "additional_info": {
                 "version": "1.0",
+                "conversation_key": ctx.conversation_key,
+                "sso_id": ctx.sso_id,
+                "session_id": ctx.session_id,
                 "model": model,
-                "user_id": user_id,
                 "input_tokens": token_in,
                 "output_tokens": token_out,
                 "rag_speed": durations.get("rag", 0),
@@ -486,6 +500,7 @@ class LLMClient:
                 "total_time": durations.get("total", 0),
                 "regenerate": regenerate,
                 "remaining_user_messages": durations.get("remaining_user_messages", 0),
+                "timestamp": time.time(),
             }
         }
         return start_tag_logs + json.dumps(logs, ensure_ascii=False) + end_tag_logs

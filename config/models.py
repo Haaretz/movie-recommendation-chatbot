@@ -8,10 +8,12 @@ from pydantic import BaseModel, Field
 
 @dataclass
 class ChatContext:
+    conversation_key: str
+    sso_id: str
+    session_id: str
     history: List[Content]
     seen: Set[str]
     message: str
-    user_id: str
     remaining_user_messages: int
 
 
