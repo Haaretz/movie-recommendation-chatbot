@@ -60,7 +60,7 @@ def create_llm_client_and_model():
 # --------------------------------------------------------------------------- #
 # Enforce “paying” user (helper)
 # --------------------------------------------------------------------------- #
-def extract_token_data_if_present(request: Request) -> dict | None:
+def get_sso_token_data(request: Request) -> dict | None:
     """
     Extracts and decodes the sso_token if present.
     Returns the decoded token data or None if no token is present.
@@ -94,6 +94,7 @@ llm_client_instance, genai_client = create_llm_client_and_model()
 # --------------------------------------------------------------------------- #
 origins = [
     "https://localhost",
+    "https://local.haaretz.co.il",
     "https://localhost.haaretz.co.il",
     "https://localhost:3000",
     "https://react-stage.haaretz.co.il",
@@ -133,7 +134,7 @@ app.add_middleware(
 # --------------------------------------------------------------------------- #
 # Streaming helper
 # --------------------------------------------------------------------------- #
-async def stream_llm_response(user_message: str, session_id: str) -> AsyncGenerator[str, None]:
+async def stream_llm_response(user_message: str, sso_id: str, session_id: str) -> AsyncGenerator[str, None]:
     """
     Yield chunks of the LLM streaming response.
     If an error occurs, wait one second and retry indefinitely.
@@ -141,7 +142,7 @@ async def stream_llm_response(user_message: str, session_id: str) -> AsyncGenera
     global llm_client_instance, genai_client
 
     while True:
-        logger.debug("Streaming request: '%s' for user %s", user_message, session_id)
+        logger.debug("Streaming request: '%s' for user %s and session %s", user_message, sso_id, session_id)
         full_response = ""
 
         try:
@@ -171,7 +172,9 @@ async def handle_chat_stream(
     POST /chat
     Validate the request, enforce paying-user, then stream LLM responses in plain text.
     """
-    token_data = extract_token_data_if_present(request)
+    token_data = get_sso_token_data(request)
+    logger.debug("SSO token payload:", extra={"token_data": token_data})
+    sso_id = token_data["userId"] if token_data else None
     chat_config = llm_client_instance.chat_config
 
     # If not a paying user, return friendly upgrade message
@@ -185,7 +188,6 @@ async def handle_chat_stream(
     user_message = chat_message.message
     session_id = chat_message.session_id
 
-    session_id = f'{token_data["userId"]}_{session_id}'
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -198,7 +200,7 @@ async def handle_chat_stream(
         return chat_config.long_request
 
     return StreamingResponse(
-        stream_llm_response(user_message, session_id),
+        stream_llm_response(user_message, sso_id, session_id),
         media_type="text/plain",
     )
 
@@ -212,7 +214,7 @@ async def handle_regenerate(
     POST /regenerate
     Regenerates the last assistant message based on the last user input.
     """
-    token_data = extract_token_data_if_present(request)
+    token_data = get_sso_token_data(request)
     chat_config = llm_client_instance.chat_config
 
     # If not a paying user, return friendly upgrade message
@@ -224,10 +226,10 @@ async def handle_regenerate(
         )
 
     session_id = user_data.session_id
-    session_id = f'{token_data["userId"]}_{session_id}'
+    sso_id = token_data["userId"]
 
     return StreamingResponse(
-        llm_client_instance.regenerate_response(session_id),
+        llm_client_instance.regenerate_response(sso_id, session_id),
         media_type="text/plain",
     )
 
