@@ -95,6 +95,7 @@ llm_client_instance, genai_client = create_llm_client_and_model()
 origins = [
     "https://localhost",
     "https://local.haaretz.co.il",
+    "https://local.haaretz.co.il:3000",
     "https://localhost.haaretz.co.il",
     "https://localhost:3000",
     "https://react-stage.haaretz.co.il",
