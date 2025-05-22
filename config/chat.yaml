@@ -5,7 +5,7 @@ blocked_message: "😕 הגעת למספר ההודעות המרבי לשיחה.
 non_paying_messages: |
   אוי. בדקתי ואין מנוי על שמך.
   זה הזמן לרכוש מינוי להארץ, ואז אשלח לך שלל הצעות מעולות.
-  לרכישת מינוי אפשר ללחוץ כאן: <a href="https://promotion.haaretz.co.il/offers" target="_blank" rel="noopener noreferrer" style="color: #0645AD; text-decoration: underline;">לרכישת מינוי</a>
+  <a href="https://promotion.haaretz.co.il/offers" target="_blank" rel="noopener noreferrer" style="color: #0645AD; text-decoration: underline;">לרכישת מינוי אפשר ללחוץ כאן</a>
   <info>{"system": {"paywall": true}}</info>
 long_request: |
   וואו, זו שאלה עם הרבה תוכן – יותר מ־200 מילים!
