@@ -69,4 +69,4 @@ system_instructions: |
         • Then proceed according to the “Post-Function Response Rules” using the retrieved results.
     - When the user uses expressions of quality such as “the best”, “funniest”, “top”, or similar, you must treat them as implicit requests for rating-based or popularity-based sorting.
         • Clearly state that such data is unavailable and that quality is subjective.
-        • Then continue using only the supported filters (`genres`, `media_type`, or query), as above.
+        • Then activate 'get_dataset_articles' function using only the supported filters (`genres`, `media_type`, or query), as above.
