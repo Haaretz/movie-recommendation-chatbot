@@ -182,12 +182,12 @@ async def handle_chat_stream(
     chat_config = llm_client_instance.chat_config
 
     # If not a paying user, return friendly upgrade message
-    # if not token_data or token_data.get("userType") != "paying":
-    #     return StreamingResponse(
-    #         iter([chat_config.non_paying_messages]),
-    #         media_type="text/plain",
-    #         status_code=200,
-    #     )
+    if not token_data or token_data.get("userType") != "paying":
+        return StreamingResponse(
+            iter([chat_config.non_paying_messages]),
+            media_type="text/plain",
+            status_code=200,
+        )
 
     user_message = chat_message.message
     session_id = chat_message.session_id
