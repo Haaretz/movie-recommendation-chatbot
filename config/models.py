@@ -26,6 +26,7 @@ class ChatConfig(BaseModel):
     token_limit: int
     chat_ttl_seconds: int
     non_paying_messages: str
+    days_until_not_current_in_theaters: int
 
 
 class FieldsConfig(BaseModel):

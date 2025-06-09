@@ -14,3 +14,4 @@ long_request: |
   מה בא לך לראות? סדרה או סרט? ז'אנר מסוים? מצב רוח?
 token_limit: 200
 chat_ttl_seconds: 1800 # 30 minutes
+days_until_not_current_in_theaters: 90

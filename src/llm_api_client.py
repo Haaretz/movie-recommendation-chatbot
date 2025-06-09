@@ -41,7 +41,7 @@ class LLMClient:
         redis_store: RedisChatHistory,
         chat_config: ChatConfig,
     ):
-        self.search_article = SearchArticle(qdrant_config, embedding_config)
+        self.search_article = SearchArticle(qdrant_config, embedding_config, chat_config)
         self.sys_instruct = sys_instruct
         self.model_name = llm_config.llm_model_name
         self.api_key = llm_config.GOOGLE_API_KEY

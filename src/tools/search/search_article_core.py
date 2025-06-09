@@ -1,8 +1,9 @@
+import datetime
 from typing import Any, Dict, List, Set, Union
 
 from qdrant_client import models
 
-from config.models import EmbeddingConfig, QdrantConfig
+from config.models import ChatConfig, EmbeddingConfig, QdrantConfig
 from logger import logger
 from src.tools.search.utillity.embedding import Embedding
 from src.tools.search.utillity.qdrant import QdrantClientManager
@@ -14,11 +15,12 @@ class SearchArticle(QdrantClientManager, Embedding):
     SCROLL_LIMIT = 10
     _num_results_retrieved = 5
 
-    def __init__(self, qdrant_config: QdrantConfig, embedding_config: EmbeddingConfig):
+    def __init__(self, qdrant_config: QdrantConfig, embedding_config: EmbeddingConfig, chat_config: ChatConfig):
         """Initialize SearchArticle with structured configs."""
         self.MIN_SCORE_THRESHOLD = qdrant_config.MIN_SCORE_THRESHOLD
         self.SEARCH_LIMIT = qdrant_config.SEARCH_LIMIT
         self.qdrant_collection_name = qdrant_config.qdrant_collection_name
+        self.days_until_not_current_in_theaters = chat_config.days_until_not_current_in_theaters
 
         # Initialize Qdrant client and Embedding
         QdrantClientManager.__init__(self, qdrant_config)
@@ -31,8 +33,14 @@ class SearchArticle(QdrantClientManager, Embedding):
         documents = []
         for point in points:
             payload = point.payload
-            if "publish_time" in payload:
-                payload["publish_time"] = payload["publish_time"].split("T")[0]
+            # if "publish_time" in payload:
+            #     payload["publish_time"] = payload["publish_time"].split("T")[0]
+            if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
+                payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
+            ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
+                if "בתי קולנוע" in payload["distribution_platform"]:
+                    payload["distribution_platform"].remove("בתי קולנוע")
+
             documents.append(payload)
         return documents
 
