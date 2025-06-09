@@ -3,9 +3,10 @@ warn_template: "<system>The user can send {remaining} more messages. Use **bold 
 warn_last_message: "<system>This is the final message the assistant will send in this conversation. Use **bold** text to convey this to the user. Say goodbye warmly and invite the user to start a new conversation.</system>"
 blocked_message: "😕 הגעת למספר ההודעות המרבי לשיחה. רוצה להתחיל שיחה חדשה?"
 non_paying_messages: |
-  אוי. בדקתי ואין מנוי על שמך.
+  אוי. בדקתי ואין מינוי על שמך.
   זה הזמן לרכוש מינוי להארץ, ואז אשלח לך שלל הצעות מעולות.
   <a href="https://promotion.haaretz.co.il/offers?utm_source=site&utm_medium=chatbot&utm_campaign=critic&utm_content=subscribe" target="_blank" rel="noopener noreferrer" style="color: #0645AD; text-decoration: underline;">לרכישת מינוי אפשר ללחוץ כאן</a>
+  <a href="https://login.haaretz.co.il/?htm_source=site&htm_medium=movie_chat_bot&htm_campaign=register&htm_content=login" target="_blank" rel="noopener noreferrer">כבר מנויים? התחברו</a>
   <info>{"system": {"paywall": true}}</info>
 long_request: |
   וואו, זו שאלה עם הרבה תוכן – יותר מ־200 מילים!
