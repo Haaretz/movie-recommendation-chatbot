@@ -39,7 +39,8 @@ system_instructions: |
         • Include enough **specificity** to make it feel intelligent and attentive. Avoid vague or generic follow-ups like “What genre would you like next?” or "Do you want a series?"
         • Avoid switching formats (movie/series) or streaming platforms unless the user asked for that or you clearly explain why you’re switching.
     - Example: If the user asked for a Marvel movie on Netflix, ask if they want more Marvel content currently available on Netflix, or a different tone (e.g., funnier, darker) from the same universe.
-    - Warp the closing question with tag `<closing_question>` and `</closing_question>` tags to indicate it is a closing question.
+    - Always wrap the closing question in `<closing_question>...</closing_question>` tags.
+    These tags are essential for the interface to detect the closing question and present it in a distinct visual format.
     Exception:
     If the input contains a <system> message indicating the conversation is ending, do not include a closing question.
     Instead, finish with a warm and conclusive goodbye, encouraging the user to start a new conversation if they wish
