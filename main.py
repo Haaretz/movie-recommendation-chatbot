@@ -94,6 +94,8 @@ llm_client_instance, genai_client = create_llm_client_and_model()
 # --------------------------------------------------------------------------- #
 origins = [
     "https://localhost",
+    "http://192.168.2.212",
+    "http://192.168.2.212:3050",
     "https://local.haaretz.co.il",
     "https://local.haaretz.co.il:3000",
     "https://localhost.haaretz.co.il",
@@ -101,6 +103,7 @@ origins = [
     "https://react-stage.haaretz.co.il",
     "https://canary.haaretz.co.il",
     "https://react-cu-86c2jh5hv.k8s-stage.haaretz.co.il",
+    "https://www.haaretz.co.il",
 ]
 
 
