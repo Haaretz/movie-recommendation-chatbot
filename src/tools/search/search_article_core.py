@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Set, Union
 
 from qdrant_client import models
 
@@ -38,44 +38,99 @@ class SearchArticle(QdrantClientManager, Embedding):
 
     @staticmethod
     def _create_qdrant_filter(
-        streaming: list[str],
-        genres: list[str],
+        streaming: List[str],
+        genres: List[str],
         review_type: str,
-        seen_ids: set[str],
+        seen_ids: Set[str],
     ) -> models.Filter:
-        must_conditions = []
-        must_not_conditions = []
+        """
+        Build a Qdrant filter with OR-logic between three alternative blocks:
+        1. create_by_AI == False  AND  stars > 3
+        2. section_tertiary_id == '0000017d-d7fd-d8a6'  AND  tone ∈ {'positive', 'mixed'}
+        3. writer_name == 'ניב הדס'  AND  tone == 'positive'
+        Caller-supplied filters (streaming, genres, review_type, seen_ids) are mandatory.
+        """
 
-        # --- Step 1: Create must conditions based on input parameters ---
+        # ---------- mandatory filters (always applied) ----------
+        must_conditions: List[models.Condition] = []
 
         if streaming:
             must_conditions.append(
-                models.FieldCondition(key="distribution_platform", match=models.MatchAny(any=streaming))
+                models.FieldCondition(
+                    key="distribution_platform",
+                    match=models.MatchAny(any=streaming),
+                )
             )
+
         if genres:
-            must_conditions.append(models.FieldCondition(key="genre", match=models.MatchAny(any=genres)))
+            must_conditions.append(
+                models.FieldCondition(
+                    key="genre",
+                    match=models.MatchAny(any=genres),
+                )
+            )
+
         if review_type:
             replacements = {"movie": "Movie", "series": "Series"}
-            review_type = replacements.get(review_type, review_type)
+            must_conditions.append(
+                models.FieldCondition(
+                    key="review_type",
+                    match=models.MatchValue(value=replacements.get(review_type, review_type)),
+                )
+            )
 
-            must_conditions.append(models.FieldCondition(key="review_type", match=models.MatchValue(value=review_type)))
-
-        must_conditions.append(models.FieldCondition(key="create_by_AI", match=models.MatchValue(value=False)))
-        must_conditions.append(models.FieldCondition(key="stars", range=models.Range(gt=3)))
-
-        # --- Step 2: Create must_not conditions based on seen_ids ---
-
+        # ---------- optional NOT-conditions ----------
+        must_not_conditions: List[models.Condition] = []
         if seen_ids:
             must_not_conditions.append(
                 models.FieldCondition(
-                    key="article_id",  # or "payload.article_id" if that's where your ID lives
+                    key="article_id",
                     match=models.MatchAny(any=list(seen_ids)),
                 )
             )
 
-        qdrant_filter = models.Filter(must=must_conditions, must_not=must_not_conditions)
+        # ---------- alternative block 1 ----------
+        block_a = models.Filter(
+            must=[
+                models.FieldCondition(key="create_by_AI", match=models.MatchValue(value=False)),
+                models.FieldCondition(key="stars", range=models.Range(gt=3)),
+            ]
+        )
 
-        return qdrant_filter
+        # ---------- alternative block 2 ----------
+        block_b = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="section_tertiary_id",
+                    match=models.MatchValue(value="0000017d-d7fd-d8a6-af7f-dfff3f470000"),
+                ),
+                models.FieldCondition(
+                    key="tone",
+                    match=models.MatchAny(any=["positive", "mixed"]),
+                ),
+            ]
+        )
+
+        # ---------- alternative block 3 ----------
+        block_c = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="writer_name",
+                    match=models.MatchValue(value="ניב הדס"),
+                ),
+                models.FieldCondition(
+                    key="tone",
+                    match=models.MatchValue(value="positive"),
+                ),
+            ]
+        )
+
+        # ---------- combine everything ----------
+        return models.Filter(
+            must=must_conditions,
+            must_not=must_not_conditions,
+            should=[block_a, block_b, block_c],  # OR across the three blocks
+        )
 
     def _order_search_results_by_date(
         self, search_result: List[Union[models.ScoredPoint, models.PointStruct]]

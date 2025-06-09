@@ -132,9 +132,9 @@ class LLMClient:
             # No results found, return a placeholder response
             part = Part.from_function_response(
                 name=call.name,
-                response={"content": [f"No results found for the query: {translated_query}"]},
+                response={"content": [NO_RESULT]},
             )
-            return [part], NO_RESULT
+            return [part], None
 
         # Convert results for LLM
         content_list = [{k: item.get(k) for k in self.fields_for_llm} for item in search_results]

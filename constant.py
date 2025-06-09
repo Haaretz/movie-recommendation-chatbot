@@ -1,4 +1,4 @@
-NO_RESULT = "לא נמצאו תוצאות"
+NO_RESULT = "<system>No results found. Tell the user clearly which filters were used in the search (`media_type`, `genres`, `streaming_platforms`). Suggest trying again by removing one or more of these filters. Ask the user which filter(s) they would like to remove. Only retry the search if at least one filter is changed — you must never repeat the same parameters, even if the user explicitly asks to 'try again' without any change. Make sure the user understands that expanding the search increases the chance of finding results.</system>"
 
 TROLL = {
     "article_id": "0000017f-e071-d804-ad7f-f1fbb77c0000",
