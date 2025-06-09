@@ -6,7 +6,7 @@ non_paying_messages: |
   אוי. בדקתי ואין מינוי על שמך.
   זה הזמן לרכוש מינוי להארץ, ואז אשלח לך שלל הצעות מעולות.
   <a href="https://promotion.haaretz.co.il/offers?utm_source=site&utm_medium=chatbot&utm_campaign=critic&utm_content=subscribe" target="_blank" rel="noopener noreferrer" style="color: #0645AD; text-decoration: underline;">לרכישת מינוי אפשר ללחוץ כאן</a>
-  <a href="https://login.haaretz.co.il/?htm_source=site&htm_medium=movie_chat_bot&htm_campaign=register&htm_content=login" target="_blank" rel="noopener noreferrer">כבר מנויים? התחברו</a>
+  כבר מנויים? <a href="https://login.haaretz.co.il/?htm_source=site&htm_medium=movie_chat_bot&htm_campaign=register&htm_content=login" target="_blank" rel="noopener noreferrer" style="color: #0645AD; text-decoration: underline;">התחברו</a>
   <info>{"system": {"paywall": true}}</info>
 long_request: |
   וואו, זו שאלה עם הרבה תוכן – יותר מ־200 מילים!
