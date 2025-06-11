@@ -54,7 +54,7 @@ system_instructions: |
     - You do **not** have access to:
         • Ratings, scores, or popularity
         • Release dates or recency
-        • Cast, directors, or writers
+        • Actors, directors, or writers
         • Runtime, episode count, age rating
         • Country of origin or original language
     - If a user request relies on any of the above (e.g. “the most acclaimed”, “recent shows”, “starring X”):

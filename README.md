@@ -25,8 +25,8 @@ A **streaming recommendation assistant** for movies & TV built with **FastAPI, G
   ```bash
   curl -k -X POST https://movie-recommendation-chatbot.haaretz.co.il/chat \
     -H "Content-Type: application/json" \
-    -H "Cookie: sso_token=<BASE64_ENCODED_TOKEN>" \
-    -d '{"message": "Recommend a science fiction movie from the 90s", "session_id": "user_123"}' \
+    -H "Cookie: sso_token=$(echo -n '{"userId":"test_user","userType":"paying"}' | base64)" \
+    -d '{"message": "Recommend a science fiction movie from the 90s", "session_id": "user_123",}' \
     --no-buffer
   ```
 
