@@ -38,7 +38,7 @@ class SearchArticle(QdrantClientManager, Embedding):
             if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
                 payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
             ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
-                if "בתי קולנוע" in payload["distribution_platform"]:
+                if payload.get("distribution_platform") and "בתי קולנוע" in payload["distribution_platform"]:
                     payload["distribution_platform"].remove("בתי קולנוע")
 
             documents.append(payload)
