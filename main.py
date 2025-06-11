@@ -144,22 +144,25 @@ async def stream_llm_response(user_message: str, sso_id: str, session_id: str) -
     If an error occurs, wait one second and retry indefinitely.
     """
     global llm_client_instance, genai_client
+    _error_count: int = 0
 
     while True:
         logger.debug("Streaming request: '%s' for user %s and session %s", user_message, sso_id, session_id)
         full_response = ""
 
         try:
-            async for chunk in llm_client_instance.streaming_message(user_message, session_id, sso_id):
+            async for chunk in llm_client_instance.streaming_message(user_message, session_id, sso_id, _error_count):
                 yield chunk
                 await asyncio.sleep(0)
                 full_response += chunk
 
             logger.debug("Final response: '%s'", full_response)
+            _error_count = 0  # Reset error count after success
             return  # exit after success
 
         except Exception as e:
             logger.error("LLMClient error: %s. Reinitializing client and retrying.", e)
+            _error_count += 1
             llm_client_instance, genai_client = create_llm_client_and_model()
             await asyncio.sleep(1)
 

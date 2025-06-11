@@ -269,7 +269,9 @@ class LLMClient:
         async for chunk in self._process_message_stream(ctx, regenerate=True):
             yield chunk
 
-    async def streaming_message(self, message: str, session_id: str, sso_id: str) -> AsyncGenerator[str, None]:
+    async def streaming_message(
+        self, message: str, session_id: str, sso_id: str, _error_count: int
+    ) -> AsyncGenerator[str, None]:
         """Handle a new user message with full persistence."""
         conversation_key = f"{sso_id}_{session_id}"
 
@@ -292,6 +294,7 @@ class LLMClient:
             history=history,
             seen=seen,
             remaining_user_messages=remaining,
+            error_count=_error_count,
         )
 
         async for chunk in self._process_message_stream(ctx):
@@ -387,6 +390,7 @@ class LLMClient:
             "llm_followup": llm_followup_duration,
             "total": total_duration,
             "remaining_user_messages": ctx.remaining_user_messages,
+            "thinking process": "Thinking Process:" in full_reply,
         }
 
         yield self._generate_logs(
@@ -398,6 +402,7 @@ class LLMClient:
             parts=parts if involved_fc else None,
             durations=durations,
             regenerate=regenerate,
+            article_ids=[item.get("article_id") for item in metadata] if metadata else None,
         )
 
     async def _stream_llm_response(
@@ -476,6 +481,7 @@ class LLMClient:
         parts: Optional[List[Part]],
         durations: dict,
         regenerate: bool,
+        ids: Optional[List[str]] = None,
     ) -> str:
         prior_history = ctx.history + [Content(role="user", parts=[Part(text=ctx.message)])]
         if involved_fc and parts:
@@ -503,6 +509,8 @@ class LLMClient:
                 "regenerate": regenerate,
                 "remaining_user_messages": durations.get("remaining_user_messages", 0),
                 "timestamp": time.time(),
+                "article_ids": ids if ids else [],
+                "thinking_process": durations.get("thinking process", False),
             }
         }
         return start_tag_logs + json.dumps(logs, ensure_ascii=False) + end_tag_logs
