@@ -22,7 +22,9 @@ get_articles = FunctionDeclaration(
 
     3.  **Identification Leading to Information/Review:** The user is trying to remember/identify a show/movie by describing it. Trigger this function to use the description as a query, understanding the likely goal is to find the item *and then* potentially retrieve information or a review about it via the RAG system. (e.g., "What's that movie about...?").
 
-    4. **Comparison between Titles:** The user is looking for a comparison between two or more titles, which may involve identifying similarities or differences. Run the function separately on each title.
+    4.  **Writer-Specific Filtering:** If the user explicitly asks to read reviews or get recommendations by a particular writer — for example, "What does חן חדד recommend?" or "Show me movies reviewed by ניב הדס" — include the relevant writer's name in the `writer_filter` parameter.
+        *   Only apply this filter if the user refers clearly to one or more writers by name.
+        *   This filter can also be used in combination with genre or platform filters to find personalized recommendations by trusted voices.
 
 
     **Important Constraint:** **Do not** simply provide a generic textual recommendation based on the model's internal knowledge. **Always invoke this function** for recommendation requests to ensure the suggestions are generated using the designated tool/data.
@@ -105,10 +107,28 @@ get_articles = FunctionDeclaration(
                     ],
                 },
             },
+            "writer_filter": {
+                "type": "array",
+                "description": "Optional filter for specific article authors. Use this when the user explicitly asks for reviews or recommendations by one or more named writers (e.g., חן חדד).",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "חן חדד",
+                        "אורי קליין",
+                        "ניב הדס",
+                        "גילי איזקוביץ'",
+                        "אורון שמיר",
+                        "נתנאל שמילוביץ'",
+                        "שני ליטמן",
+                        "פבלו אוטין",
+                    ],
+                },
+            },
         },
         "required": ["query"],
     },
 )
+
 
 troll = FunctionDeclaration(
     name="trigger_troll_response",
@@ -155,9 +175,10 @@ if __name__ == "__main__":
 
     # Example user prompt
     prompt = """
-שלום, קוראים לי משה, בא לי לראות סרט מצויר בסגנון פיקסר
+שלום, קוראים לי משה, בא לי לראות סרט מצויר בסגנון פיקסר. יש משהו שקליין המליץ עליו?
     """
     response = chat.send_message(prompt)
 
     # Print the function call(s) chosen by the LLM
     print(response.function_calls)
+    print(response.function_calls[0].args["writer_filter"])
