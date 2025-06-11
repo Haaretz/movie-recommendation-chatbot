@@ -576,7 +576,9 @@ async def main_cli():
             continue
 
         print("LLM: ", end="", flush=True)
-        async for chunk in llm_client.streaming_message(user_msg, session_id=str(counter), sso_id=str(counter)):
+        async for chunk in llm_client.streaming_message(
+            user_msg, session_id=str(counter), sso_id=str(counter), _error_count=0
+        ):
             print(chunk, end="", flush=True)
         print()
 
