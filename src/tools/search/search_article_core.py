@@ -49,6 +49,7 @@ class SearchArticle(QdrantClientManager, Embedding):
         streaming: List[str],
         genres: List[str],
         review_type: str,
+        writer_filter: List[str],
         seen_ids: Set[str],
     ) -> models.Filter:
         """
@@ -84,6 +85,13 @@ class SearchArticle(QdrantClientManager, Embedding):
                 models.FieldCondition(
                     key="review_type",
                     match=models.MatchValue(value=replacements.get(review_type, review_type)),
+                )
+            )
+        if writer_filter:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="writer_name",
+                    match=models.MatchAny(any=writer_filter),
                 )
             )
 
@@ -161,7 +169,13 @@ class SearchArticle(QdrantClientManager, Embedding):
         return sorted_results[: self.SEARCH_LIMIT]
 
     def retrieve_relevant_documents(
-        self, query: str, streaming: list[str], genres: list[str], review_type: str, seen_ids: set[str]
+        self,
+        query: str,
+        streaming: list[str],
+        genres: list[str],
+        review_type: str,
+        writer_filter: list[str],
+        seen_ids: set[str],
     ) -> str:
         """
         Retrieve relevant documents from Qdrant using vector search and payload filters.
@@ -184,10 +198,9 @@ class SearchArticle(QdrantClientManager, Embedding):
         """
 
         query_embedding_vector = self.embed_query(query)
-        qdrant_filter = self._create_qdrant_filter(streaming, genres, review_type, seen_ids)
+        qdrant_filter = self._create_qdrant_filter(streaming, genres, review_type, writer_filter, seen_ids)
 
         search_params = models.SearchParams(hnsw_ef=self.HNSW_EF, exact=False)
-
         try:
             search_result = self.client_qdrant.search(
                 collection_name=self.qdrant_collection_name,

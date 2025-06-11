@@ -110,22 +110,24 @@ class LLMClient:
         streaming = args.get("streaming_platforms", None)
         genres = args.get("genres", None)
         media_type = args.get("media_type", None)
+        writer_filter = args.get("writer_filter", None)
 
         if not query:
             logger.warning("No query provided for get_dataset_articles")
             query = ctx.message
 
         logger.info(
-            "Executing get_dataset_articles with query=%s, streaming=%s, genres=%s, media_type=%s",
+            "Executing get_dataset_articles with query=%s, streaming=%s, genres=%s, media_type=%s, writer_filter=%s",
             query,
             streaming,
             genres,
             media_type,
+            writer_filter,
         )
 
         translated_query = self._translate_english_query(query)
         search_results = self.search_article.retrieve_relevant_documents(
-            translated_query, streaming, genres, media_type, ctx.seen
+            translated_query, streaming, genres, media_type, writer_filter, ctx.seen
         )
 
         if not search_results:
