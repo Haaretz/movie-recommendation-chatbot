@@ -482,6 +482,7 @@ class LLMClient:
         durations: dict,
         regenerate: bool,
         ids: Optional[List[str]] = None,
+        article_ids: Optional[List[str]] = None,
     ) -> str:
         prior_history = ctx.history + [Content(role="user", parts=[Part(text=ctx.message)])]
         if involved_fc and parts:
@@ -509,7 +510,7 @@ class LLMClient:
                 "regenerate": regenerate,
                 "remaining_user_messages": durations.get("remaining_user_messages", 0),
                 "timestamp": time.time(),
-                "article_ids": ids if ids else [],
+                "article_ids": article_ids if article_ids else [],
                 "thinking_process": durations.get("thinking process", False),
             }
         }
