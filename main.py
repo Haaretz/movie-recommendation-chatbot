@@ -212,6 +212,38 @@ async def handle_chat_stream(
     )
 
 
+# --------------------------------------------------------------------------- #
+# Streaming helper – Regenerate
+# --------------------------------------------------------------------------- #
+async def stream_regenerate_response(sso_id: str, session_id: str) -> AsyncGenerator[str, None]:
+    """
+    Yield chunks of a regenerated LLM response.
+    Exactly the same retry / re‑initialisation logic used in stream_llm_response.
+    """
+    global llm_client_instance, genai_client
+    _error_count: int = 0
+
+    while True:
+        logger.debug("Regenerating for user %s, session %s", sso_id, session_id)
+        full_response = ""
+
+        try:
+            async for chunk in llm_client_instance.regenerate_response(sso_id, session_id, _error_count):
+                yield chunk
+                await asyncio.sleep(0)
+                full_response += chunk
+
+            logger.debug("Final regenerated response: '%s'", full_response)
+            _error_count = 0
+            return
+
+        except Exception as e:
+            logger.error("LLMClient regenerate error: %s. Re‑initialising client and retrying.", e)
+            _error_count += 1
+            llm_client_instance, genai_client = create_llm_client_and_model()
+            await asyncio.sleep(1)
+
+
 @app.post("/regenerate", response_class=StreamingResponse, summary="Regenerate last reply (paying users only)")
 async def handle_regenerate(
     request: Request,
@@ -224,7 +256,7 @@ async def handle_regenerate(
     token_data = get_sso_token_data(request)
     chat_config = llm_client_instance.chat_config
 
-    # If not a paying user, return friendly upgrade message
+    # Non‑paying users get upgrade‑message
     if not token_data or token_data.get("userType") != "paying":
         return StreamingResponse(
             iter([chat_config.non_paying_messages]),
@@ -236,7 +268,7 @@ async def handle_regenerate(
     sso_id = token_data["userId"]
 
     return StreamingResponse(
-        llm_client_instance.regenerate_response(sso_id, session_id),
+        stream_regenerate_response(sso_id, session_id),
         media_type="text/plain",
     )
 
@@ -258,7 +290,7 @@ async def version():
     GET /version
     Returns the API version.
     """
-    return {"version": "0.1.0"}
+    return {"version": "0.3.0"}
 
 
 # --------------------------------------------------------------------------- #

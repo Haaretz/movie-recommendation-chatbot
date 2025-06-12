@@ -239,7 +239,7 @@ class LLMClient:
                                 seen_ids.add(article_id)
         return seen_ids
 
-    async def regenerate_response(self, sso_id: str, session_id: str) -> AsyncGenerator[str, None]:
+    async def regenerate_response(self, sso_id: str, session_id: str, _error_count: int) -> AsyncGenerator[str, None]:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
         conversation_key = f"{sso_id}_{session_id}"
@@ -264,7 +264,7 @@ class LLMClient:
             history=history,
             seen=seen,
             remaining_user_messages=remaining,
-            error_count=0,
+            error_count=_error_count,
         )
 
         async for chunk in self._process_message_stream(ctx, regenerate=True):
