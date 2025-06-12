@@ -243,8 +243,8 @@ class LLMClient:
         """Regenerate the response for the last user message, reusing streaming logic."""
         # TODO: consider deferring this deletion after response yield for lower perceived latency
         conversation_key = f"{sso_id}_{session_id}"
-        blocked, warning = self._get_message_quota(conversation_key)
-        if blocked:
+        remaining, warning = self._get_message_quota(conversation_key)
+        if remaining == 0:
             yield warning
             return
 
@@ -263,7 +263,8 @@ class LLMClient:
             message=full_message,
             history=history,
             seen=seen,
-            remaining_user_messages=blocked,
+            remaining_user_messages=remaining,
+            error_count=0,
         )
 
         async for chunk in self._process_message_stream(ctx, regenerate=True):
@@ -582,9 +583,9 @@ async def main_cli():
         ):
             print(chunk, end="", flush=True)
         print()
-
-        # async for chunk in llm_client.regenerate_response(user_id=counter):
-        #     print(chunk, end="", flush=True)
+        print("\n--- Regenerating response ---")
+        async for chunk in llm_client.regenerate_response(session_id=str(counter), sso_id=str(counter)):
+            print(chunk, end="", flush=True)
 
         print()
 
