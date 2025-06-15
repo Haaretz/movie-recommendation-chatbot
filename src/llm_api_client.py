@@ -1,6 +1,6 @@
 import json
 import time
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, List, Optional, Set
 
 from google import genai
 from google.genai import types
@@ -40,8 +40,8 @@ class LLMClient:
         sys_instruct: str,
         redis_store: RedisChatHistory,
         chat_config: ChatConfig,
+        excluded_ids: Optional[Set[str]] = None,
     ):
-        self.search_article = SearchArticle(qdrant_config, embedding_config, chat_config)
         self.sys_instruct = sys_instruct
         self.model_name = llm_config.llm_model_name
         self.api_key = llm_config.GOOGLE_API_KEY
@@ -50,6 +50,9 @@ class LLMClient:
         self.redis = redis_store
         self.chat_config = chat_config
         self.user_quota = chat_config.max_user_messages_per_session
+        excluded_ids = excluded_ids if excluded_ids is not None else set()
+
+        self.search_article = SearchArticle(qdrant_config, embedding_config, chat_config, excluded_ids=excluded_ids)
 
         self.client = genai.Client(vertexai=False, api_key=self.api_key)
 
@@ -546,9 +549,13 @@ class LLMClient:
 async def main_cli():
     import numpy as np
 
+    from config.excluded_config import ExcludedIdLoader
     from config.loader import load_config
 
     app_config = load_config()
+    # Load excluded IDs from config
+    excluded_loader = ExcludedIdLoader()
+    excluded_ids = excluded_loader.get_excluded_ids()
 
     # Load system instructions from prompts.yaml
     import yaml
@@ -565,6 +572,7 @@ async def main_cli():
         sys_instruct=sys_instruct,
         redis_store=RedisChatHistory(app_config.chat.chat_ttl_seconds),
         chat_config=app_config.chat,
+        excluded_ids=excluded_ids,
     )
 
     counter = np.random.randint(1, 99999)
@@ -584,7 +592,7 @@ async def main_cli():
             print(chunk, end="", flush=True)
         print()
         print("\n--- Regenerating response ---")
-        async for chunk in llm_client.regenerate_response(session_id=str(counter), sso_id=str(counter)):
+        async for chunk in llm_client.regenerate_response(session_id=str(counter), sso_id=str(counter), _error_count=0):
             print(chunk, end="", flush=True)
 
         print()

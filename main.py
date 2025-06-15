@@ -9,7 +9,7 @@ import base64
 import json
 import os
 from http.cookies import SimpleCookie
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Set
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from google import genai
 from pydantic import BaseModel
 
+from config.excluded_config import ExcludedIdLoader
 from config.loader import load_config
 from logger import logger
 from src.llm_api_client import LLMClient
@@ -40,6 +41,10 @@ def create_llm_client_and_model():
         prompts = yaml.safe_load(f)
     sys_instruct = prompts.get("system_instructions", "")
 
+    excluded_id_loader = ExcludedIdLoader()
+    # Get the set of excluded IDs
+    global_excluded_ids: Set[str] = excluded_id_loader.get_excluded_ids()
+
     # Initialize LLM wrapper
     llm_client = LLMClient(
         llm_config=app_config.llm,
@@ -49,6 +54,7 @@ def create_llm_client_and_model():
         sys_instruct=sys_instruct,
         redis_store=RedisChatHistory(app_config.chat.chat_ttl_seconds),
         chat_config=app_config.chat,
+        excluded_ids=global_excluded_ids,
     )
 
     # Also return raw genai client (used for token counting)
@@ -293,11 +299,15 @@ async def version():
     return {"version": "0.3.0"}
 
 
-# --------------------------------------------------------------------------- #
-# Entry-point when running as a script
-# --------------------------------------------------------------------------- #
-if __name__ == "__main__":
+def main():
     port = int(os.environ.get("PORT", 8080))
     logger.info("Starting Uvicorn server on port %s", port)
     logger.info("version: %s", "0.0.1")
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+# --------------------------------------------------------------------------- #
+# Entry-point when running as a script
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":
+    main()

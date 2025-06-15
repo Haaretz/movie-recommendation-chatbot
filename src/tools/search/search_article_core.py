@@ -15,12 +15,19 @@ class SearchArticle(QdrantClientManager, Embedding):
     SCROLL_LIMIT = 10
     _num_results_retrieved = 5
 
-    def __init__(self, qdrant_config: QdrantConfig, embedding_config: EmbeddingConfig, chat_config: ChatConfig):
+    def __init__(
+        self,
+        qdrant_config: QdrantConfig,
+        embedding_config: EmbeddingConfig,
+        chat_config: ChatConfig,
+        excluded_ids: Set[str],
+    ):
         """Initialize SearchArticle with structured configs."""
         self.MIN_SCORE_THRESHOLD = qdrant_config.MIN_SCORE_THRESHOLD
         self.SEARCH_LIMIT = qdrant_config.SEARCH_LIMIT
         self.qdrant_collection_name = qdrant_config.qdrant_collection_name
         self.days_until_not_current_in_theaters = chat_config.days_until_not_current_in_theaters
+        self.excluded_ids = excluded_ids
 
         # Initialize Qdrant client and Embedding
         QdrantClientManager.__init__(self, qdrant_config)
@@ -44,8 +51,8 @@ class SearchArticle(QdrantClientManager, Embedding):
             documents.append(payload)
         return documents
 
-    @staticmethod
     def _create_qdrant_filter(
+        self,
         streaming: List[str],
         genres: List[str],
         review_type: str,
@@ -101,7 +108,14 @@ class SearchArticle(QdrantClientManager, Embedding):
             must_not_conditions.append(
                 models.FieldCondition(
                     key="article_id",
-                    match=models.MatchAny(any=list(seen_ids)),
+                    match=models.MatchAny(any=list(seen_ids) + self.excluded_ids),
+                )
+            )
+        else:
+            must_not_conditions.append(
+                models.FieldCondition(
+                    key="article_id",
+                    match=models.MatchAny(any=list(self.excluded_ids)),
                 )
             )
 
