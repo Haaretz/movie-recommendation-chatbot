@@ -185,17 +185,6 @@ async def handle_chat_stream(
     POST /chat
     Validate the request, enforce paying-user, then stream LLM responses in plain text.
     """
-    
-    # Print all cookies from request if query param "tomer" is present
-    if "tomer" in request.query_params:
-        cookie_header = request.headers.get("cookie")
-        if cookie_header:
-            cookie = SimpleCookie()
-            cookie.load(cookie_header)
-            logger.debug("All cookies:", extra={name: morsel.value for name, morsel in cookie.items()})
-        else:
-            logger.debug("No cookies found in request")
-
     token_data = get_sso_token_data(request)
     logger.debug("SSO token payload:", extra={"token_data": token_data})
     sso_id = token_data["userId"] if token_data else None
