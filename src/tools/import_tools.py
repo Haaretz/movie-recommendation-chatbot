@@ -124,6 +124,15 @@ get_articles = FunctionDeclaration(
                     ],
                 },
             },
+            # "best_of": {
+            #     "type": "boolean",
+            #     "description": (
+            #         "Optional flag to indicate if the user is looking for 'best of' recommendations. "
+            #         "Set to true if the user asks for top-rated or highly recommended content, "
+            #         "like 'best movies' or 'top series to watch'."
+            #         "This helps in filtering for high-quality recommendations. (5 stars recommendations)"
+            #     ),
+            # },
         },
         "required": ["query"],
     },

@@ -108,7 +108,7 @@ class SearchArticle(QdrantClientManager, Embedding):
             must_not_conditions.append(
                 models.FieldCondition(
                     key="article_id",
-                    match=models.MatchAny(any=list(seen_ids) + self.excluded_ids),
+                    match=models.MatchAny(any=set(seen_ids).union(self.excluded_ids)),
                 )
             )
         else:

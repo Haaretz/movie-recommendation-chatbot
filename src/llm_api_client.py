@@ -114,6 +114,7 @@ class LLMClient:
         genres = args.get("genres", None)
         media_type = args.get("media_type", None)
         writer_filter = args.get("writer_filter", None)
+        # best_of = args.get("best_of", None)
 
         if not query:
             logger.warning("No query provided for get_dataset_articles")
@@ -591,11 +592,11 @@ async def main_cli():
         ):
             print(chunk, end="", flush=True)
         print()
-        print("\n--- Regenerating response ---")
-        async for chunk in llm_client.regenerate_response(session_id=str(counter), sso_id=str(counter), _error_count=0):
-            print(chunk, end="", flush=True)
+        # print("\n--- Regenerating response ---")
+        # async for chunk in llm_client.regenerate_response(session_id=str(counter), sso_id=str(counter), _error_count=0):
+        #     print(chunk, end="", flush=True)
 
-        print()
+        # print()
 
 
 if __name__ == "__main__":
