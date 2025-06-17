@@ -337,6 +337,15 @@ class LLMClient:
 
         return "".join(out), bold_open
 
+    @staticmethod
+    def remove_question_tag(text: str) -> str:
+        """
+        Remove <closing_question>...</closing_question> tags if the RAG don't activate.
+        """
+        if "<closing_question>" in text or "</closing_question>" in text:
+            return text.replace("<closing_question>", "").replace("</closing_question>", "")
+        return text
+
     async def _process_message_stream(self, ctx: ChatContext, regenerate: bool = False) -> AsyncGenerator[str, None]:
         chat = self._create_chat_session(history=ctx.history)
         full_reply = ""
@@ -355,7 +364,7 @@ class LLMClient:
                 yield "Error: Disallowed tags detected in the response."
                 return
             full_reply += chunk
-            yield chunk
+            yield self.remove_question_tag(chunk)
         llm_initial_duration = time.time() - llm_start
 
         if len(collected_calls) == 0 and ctx.remaining_user_messages == 1:
