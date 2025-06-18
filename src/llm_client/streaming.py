@@ -102,7 +102,6 @@ async def stream_llm_response(
 async def stream_llm_followup(
     session,
     parts: List[Part],
-    remove_closing_question: bool = False,
 ) -> AsyncGenerator[str, None]:
     """
     Stream the LLM continuation after a function call response (RAG).
@@ -115,6 +114,4 @@ async def stream_llm_followup(
                 yield "DISALLOWED_TAGS"
                 return
             converted, bold_open = convert_streaming_markdown_bold(chunk.text, bold_open)
-            if remove_closing_question:
-                converted = converted
             yield converted
