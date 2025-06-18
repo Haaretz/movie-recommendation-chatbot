@@ -101,7 +101,7 @@ class LLMClient:
         metadata = None
         if isinstance(search_results, list):
             metadata = [{k: item.get(k, None) for k in self.fields_for_frontend} for item in search_results]
-        return parts, metadata
+        return parts, metadata, search_results is None
 
     def _handle_get_dataset_articles(self, call, ctx: ChatContext):
         """
@@ -377,7 +377,7 @@ class LLMClient:
         if collected_calls:
             involved_fc = True
             rag_start = time.time()
-            parts, metadata = self._filter_fields_and_call_tool(collected_calls, ctx)
+            parts, metadata, clean_end_question = self._filter_fields_and_call_tool(collected_calls, ctx)
             rag_duration = time.time() - rag_start
 
             if metadata and ctx.remaining_user_messages == 1:
@@ -391,6 +391,8 @@ class LLMClient:
                     yield "Error: Disallowed tags detected in the response."
                     return
                 full_reply += chunk
+                if clean_end_question:
+                    chunk = self.remove_question_tag(chunk)
                 yield chunk
             llm_followup_duration = time.time() - llm_followup_start
 
