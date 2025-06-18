@@ -94,7 +94,8 @@ async def stream_llm_response(
         if func_call:
             collected_calls.append(func_call)
 
-        if chunk.candidates[0].finish_reason != FinishReason.STOP and chunk.candidates[0].finish_reason in FinishReason:
+        reason = chunk.candidates[0].finish_reason
+        if reason is not None and reason != FinishReason.STOP and reason in FinishReason:
             yield "gemini content filters triggered"
 
 
