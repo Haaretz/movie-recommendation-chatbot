@@ -78,7 +78,7 @@ class LLMClient:
     def _consume_quota(self, user_id: str) -> tuple[int, Optional[str]]:
         used = self.redis.get_usage_count(user_id)
         remaining_before = self.user_quota - used
-        print(f"--------- User messages remaining (used: {used}) ---------")
+        # print(f"--------- User messages remaining (used: {used}) ---------")
 
         if remaining_before <= 0:
             return -1, self.chat_config.blocked_message
