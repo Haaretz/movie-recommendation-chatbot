@@ -8,6 +8,7 @@ import asyncio
 import base64
 import json
 import os
+import traceback
 from http.cookies import SimpleCookie
 from typing import AsyncGenerator, Set
 
@@ -168,6 +169,7 @@ async def stream_llm_response(user_message: str, sso_id: str, session_id: str) -
 
         except Exception as e:
             logger.error("LLMClient error: %s. Reinitializing client and retrying.", e)
+            logger.error("Full traceback:\n%s", traceback.format_exc())
             _error_count += 1
             llm_client_instance, genai_client = create_llm_client_and_model()
             if _error_count > 5:
