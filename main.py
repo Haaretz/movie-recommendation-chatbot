@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from config.excluded_config import ExcludedIdLoader
 from config.loader import load_config
 from logger import logger
-from src.llm_api_client import LLMClient
+from src.llm_client.client import LLMClient
 from src.redis_chat_history import RedisChatHistory
 
 
@@ -157,7 +157,7 @@ async def stream_llm_response(user_message: str, sso_id: str, session_id: str) -
         full_response = ""
 
         try:
-            async for chunk in llm_client_instance.streaming_message(user_message, session_id, sso_id, _error_count):
+            async for chunk in llm_client_instance.stream_chat(user_message, session_id, sso_id, _error_count):
                 yield chunk
                 await asyncio.sleep(0)
                 full_response += chunk
@@ -170,6 +170,9 @@ async def stream_llm_response(user_message: str, sso_id: str, session_id: str) -
             logger.error("LLMClient error: %s. Reinitializing client and retrying.", e)
             _error_count += 1
             llm_client_instance, genai_client = create_llm_client_and_model()
+            if _error_count > 5:
+                logger.error("Too many errors in streaming, giving up.")
+                return
             await asyncio.sleep(1)
 
 
@@ -234,7 +237,7 @@ async def stream_regenerate_response(sso_id: str, session_id: str) -> AsyncGener
         full_response = ""
 
         try:
-            async for chunk in llm_client_instance.regenerate_response(sso_id, session_id, _error_count):
+            async for chunk in llm_client_instance.regenerate_response(session_id, sso_id, _error_count):
                 yield chunk
                 await asyncio.sleep(0)
                 full_response += chunk
@@ -247,6 +250,9 @@ async def stream_regenerate_response(sso_id: str, session_id: str) -> AsyncGener
             logger.error("LLMClient regenerate error: %s. Re‑initialising client and retrying.", e)
             _error_count += 1
             llm_client_instance, genai_client = create_llm_client_and_model()
+            if _error_count > 5:
+                logger.error("Too many errors in regenerate, giving up.")
+                return
             await asyncio.sleep(1)
 
 

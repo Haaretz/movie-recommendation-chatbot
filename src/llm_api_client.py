@@ -455,6 +455,8 @@ class LLMClient:
                 and chunk.candidates[0].content.parts
                 and getattr(chunk.candidates[0].content.parts[0], "function_call", None)
             )
+            if chunk.candidates[0].finish_reason in types.FinishReason:
+                yield "gemini content filters triggered"
             if func_call:
                 collected_calls.append(func_call)
 
