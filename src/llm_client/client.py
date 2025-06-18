@@ -13,13 +13,7 @@ from config.models import (
     LLMConfig,
     QdrantConfig,
 )
-from constant import (
-    NO_RESULT,
-    end_tag_info,
-    end_tag_logs,
-    start_tag_info,
-    start_tag_logs,
-)
+from constant import end_tag_info, end_tag_logs, start_tag_info, start_tag_logs
 from src.llm_client.handlers import build_handler_registry
 from src.llm_client.logging_utils import generate_log_blob
 from src.llm_client.session import LLMChatSession
@@ -220,18 +214,18 @@ class LLMClient:
                 yield self._wrap_info(metadata, last_message=(ctx.remaining_user_messages == 1))
 
             start_followup = time.time()
-            if handler_parts[0].function_response.response.get("content")[0] != NO_RESULT:
-                start_followup = time.time()
-                async for chunk in stream_llm_followup(chat, parts, remove_closing_question=remove_closing_question):
-                    full_reply += chunk
-                    yield chunk
-                durations["llm_followup"] = time.time() - start_followup
-            else:
-                # No parts returned, regenerate a standard LLM response
+            # if handler_parts[0].function_response.response.get("content")[0] != NO_RESULT:
+            if remove_closing_question:
                 raw_stream = stream_llm_followup(chat, parts)
                 async for chunk in stripper(raw_stream):
                     full_reply += chunk
                     yield chunk
+            else:
+                async for chunk in stream_llm_followup(chat, parts):
+                    full_reply += chunk
+                    yield chunk
+                durations["llm_followup"] = time.time() - start_followup
+
             durations["llm_followup"] = time.time() - start_followup
 
         self._save_to_redis(ctx.message, full_reply, ctx.conversation_key, parts if parts else None)
