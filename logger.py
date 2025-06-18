@@ -6,6 +6,7 @@ from pythonjsonlogger import jsonlogger
 APP_NAME = os.environ.get("APP_NAME", "UNKNOWN_APP_NAME")
 
 logger_level = logging.DEBUG if os.environ.get("LOG_LEVEL", "debug") == "debug" else logging.INFO
+logger_level = logging.DEBUG
 logger = logging.getLogger(f"{APP_NAME}_logger")
 logger.setLevel(logger_level)
 
