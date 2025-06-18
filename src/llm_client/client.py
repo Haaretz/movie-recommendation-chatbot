@@ -224,7 +224,6 @@ class LLMClient:
                 async for chunk in stream_llm_followup(chat, parts):
                     full_reply += chunk
                     yield chunk
-                durations["llm_followup"] = time.time() - start_followup
 
             durations["llm_followup"] = time.time() - start_followup
 
