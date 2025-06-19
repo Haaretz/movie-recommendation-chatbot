@@ -230,6 +230,7 @@ class LLMClient:
         self._save_to_redis(ctx.message, full_reply, ctx.conversation_key, parts if parts else None)
         durations["total"] = time.time() - start_total
         durations["remaining_user_messages"] = ctx.remaining_user_messages
+        durations["article_ids"] = list(ctx.seen)
 
         token_in, token_out = self.tokenizer.count_tokens(ctx.history, ctx.message, full_reply)
 
