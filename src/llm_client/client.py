@@ -196,6 +196,7 @@ class LLMClient:
             yield self._wrap_info({}, last_message=True)
 
         metadata, parts = None, []
+        results = []
         if collected_calls:
             start_rag = time.time()
             for call in collected_calls:
@@ -233,7 +234,7 @@ class LLMClient:
         self._save_to_redis(ctx.message, full_reply, ctx.conversation_key, parts if parts else None)
         durations["total"] = time.time() - start_total
         durations["remaining_user_messages"] = ctx.remaining_user_messages
-        durations["article_ids"] = list(ctx.seen)
+        durations["article_ids"] = [article.get("article_id") for article in results]
 
         token_in, token_out = self.tokenizer.count_tokens(ctx.history, ctx.message, full_reply)
 
