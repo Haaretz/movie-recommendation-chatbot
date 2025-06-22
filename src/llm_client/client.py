@@ -184,7 +184,7 @@ class LLMClient:
         start_total = time.time()
         start_llm = time.time()
 
-        stripper = strip_closing_question_tags()
+        stripper = strip_closing_question_tags(strip_tags=True)
         raw_stream = stream_llm_response(chat, ctx.message, collected_calls)
 
         async for chunk in stripper(raw_stream):
@@ -216,12 +216,15 @@ class LLMClient:
             start_followup = time.time()
             # if handler_parts[0].function_response.response.get("content")[0] != NO_RESULT:
             if remove_closing_question:
-                raw_stream = stream_llm_followup(chat, parts)
-                async for chunk in stripper(raw_stream):
+                stripper = strip_closing_question_tags(strip_tags=True)
+                raw_stream = stripper(stream_llm_followup(chat, parts))
+                async for chunk in raw_stream:
                     full_reply += chunk
                     yield chunk
             else:
-                async for chunk in stream_llm_followup(chat, parts):
+                stripper = strip_closing_question_tags(strip_tags=False)
+                raw_stream = stripper(stream_llm_followup(chat, parts))
+                async for chunk in raw_stream:
                     full_reply += chunk
                     yield chunk
 

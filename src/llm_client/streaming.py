@@ -13,10 +13,13 @@ def has_reserved_tags(text: str) -> bool:
     return any(tag in text for tag in (start_tag_logs, end_tag_logs, start_tag_info, end_tag_info))
 
 
-def strip_closing_question_tags() -> Callable[[AsyncGenerator[str, None]], AsyncGenerator[str, None]]:
+def strip_closing_question_tags(
+    strip_tags: bool = True,
+) -> Callable[[AsyncGenerator[str, None]], AsyncGenerator[str, None]]:
     """
-    Returns a function that wraps a generator and removes <closing_question> and </closing_question> tags
-    with minimal buffering. Holds at most one chunk in memory to detect broken tags across chunk boundaries.
+    Returns a function that wraps a generator and either removes or preserves
+    <closing_question> and </closing_question> tags, depending on `strip_tags`.
+    Ensures tags are never split across chunks by buffering one chunk.
     """
 
     async def wrapper(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
@@ -24,20 +27,17 @@ def strip_closing_question_tags() -> Callable[[AsyncGenerator[str, None]], Async
         async for chunk in stream:
             combined = buffer + chunk
 
-            # Check if any full tag appears in combined
-            found_tag = False
-            for tag in ("<closing_question>", "</closing_question>"):
-                if tag in combined:
-                    combined = combined.replace(tag, "")
-                    found_tag = True
+            # Always check for complete tags in the combined string
+            has_full_tag = any(tag in combined for tag in ("<closing_question>", "</closing_question>"))
 
-            if found_tag:
-                # If tag was found and removed, drop buffer and yield combined result
+            if has_full_tag:
+                if strip_tags:
+                    # Remove both tags in a single line
+                    combined = combined.replace("<closing_question>", "").replace("</closing_question>", "")
                 buffer = ""
                 yield combined
             else:
                 if buffer:
-                    # No tag found, yield previous chunk
                     yield buffer
                 buffer = chunk
 
