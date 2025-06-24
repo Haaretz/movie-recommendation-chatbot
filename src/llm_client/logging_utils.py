@@ -51,7 +51,7 @@ def generate_log_blob(
     fc = extract_function_args_flat(collected_calls)
 
     log_payload = {
-        "version": "1.0",
+        "version": "1.1",
         "conversation_key": ctx.conversation_key,
         "sso_id": ctx.sso_id,
         "session_id": ctx.session_id,
@@ -72,6 +72,7 @@ def generate_log_blob(
         "article_ids_1": durations.get("article_ids", [])[0] if durations.get("article_ids") else None,
         "article_ids_2": durations.get("article_ids", [])[1] if len(durations.get("article_ids", [])) > 1 else None,
         "thinking_process": durations.get("thinking process", False),
+        "error": ctx.error_count,
     }
 
-    return json.dumps({"additional_info": log_payload}, ensure_ascii=False)
+    return json.dumps({"additional_info": log_payload}, ensure_ascii=False, sort_keys=True)

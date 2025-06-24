@@ -295,7 +295,7 @@ if __name__ == "__main__":
                 message=user_msg,
                 session_id=session_id,
                 sso_id=sso_id,
-                _error_count=0,
+                _error_count=5,
             ):
                 print(chunk, end="", flush=True)
             print()
