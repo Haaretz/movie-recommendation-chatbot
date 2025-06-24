@@ -1,3 +1,5 @@
+import re
+
 NO_RESULT = "<system>No results found. Tell the user clearly which filters were used in the search (`media_type`, `genres`, `streaming_platforms`). Suggest trying again by removing one or more of these filters. Ask the user which filter(s) they would like to remove. Only retry the search if at least one filter is changed — you must never repeat the same parameters, even if the user explicitly asks to 'try again' without any change. Make sure the user understands that expanding the search increases the chance of finding results.</system>"
 
 TROLL = {
@@ -18,6 +20,7 @@ TROLL = {
 טרולים (באנגלית: Trolls) הוא סרט הנפשה קומי מוזיקלי אמריקאי בתלת-ממד המבוסס על בובות הטרולים מאת תומאס דאם. הסרט הופק על ידי חברת דרימוורקס אנימציות ובוים על ידי מייק מיטשל ווולט דורן.
     """,
 }
+BOLD_HTML_PATTERN = re.compile(r"<strong>.*?</strong>")
 
 start_tag_info = "<info>"
 end_tag_info = "</info>"

@@ -2,7 +2,13 @@ from typing import AsyncGenerator, Callable, List
 
 from google.genai.types import FinishReason, FunctionCall, Part
 
-from constant import end_tag_info, end_tag_logs, start_tag_info, start_tag_logs
+from constant import (
+    BOLD_HTML_PATTERN,
+    end_tag_info,
+    end_tag_logs,
+    start_tag_info,
+    start_tag_logs,
+)
 
 
 def has_reserved_tags(text: str) -> bool:
@@ -29,12 +35,18 @@ def strip_closing_question_tags(
 
             # Always check for complete tags in the combined string
             has_full_tag = any(tag in combined for tag in ("<closing_question>", "</closing_question>"))
+            has_full_bold = bool(BOLD_HTML_PATTERN.search(combined))
 
-            if has_full_tag:
+            if has_full_tag or has_full_bold:
                 if strip_tags:
                     # Remove both tags in a single line
                     combined = combined.replace("<closing_question>", "").replace("</closing_question>", "")
                 buffer = ""
+
+                def _clean(match):
+                    return match.group(0).replace(r"\"", '"')  # Replace escaped quotes with actual quotes
+
+                combined = BOLD_HTML_PATTERN.sub(_clean, combined)
                 yield combined
             else:
                 if buffer:
