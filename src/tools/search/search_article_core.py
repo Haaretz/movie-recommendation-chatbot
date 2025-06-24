@@ -48,6 +48,12 @@ class SearchArticle(QdrantClientManager, Embedding):
                 if payload.get("distribution_platform") and "בתי קולנוע" in payload["distribution_platform"]:
                     payload["distribution_platform"].remove("בתי קולנוע")
 
+            if "Amazon Prime Video" in payload.get("distribution_platform", []):
+                # change from 'Amazon Prime Video' to 'Prime Video'
+                payload["distribution_platform"] = [
+                    platform.replace("Amazon Prime Video", "Amazon")
+                    for platform in payload.get("distribution_platform", [])
+                ]
             documents.append(payload)
         return documents
 
