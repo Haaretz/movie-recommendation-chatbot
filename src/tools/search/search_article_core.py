@@ -40,7 +40,7 @@ class SearchArticle(QdrantClientManager, Embedding):
         documents = []
         for point in points:
             payload = point.payload
-            if payload is None:
+            if payload is not None:
                 if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
                     payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
                 ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
