@@ -196,6 +196,8 @@ class LLMClient:
             yield self._wrap_info({}, last_message=True)
 
         metadata, parts = None, []
+        results: list[dict] = []  #
+
         if collected_calls:
             start_rag = time.time()
             for call in collected_calls:
