@@ -1,3 +1,4 @@
+import re
 from typing import AsyncGenerator, Callable, List
 
 from google.genai.types import FinishReason, FunctionCall, Part
@@ -78,6 +79,29 @@ def convert_streaming_markdown_bold(text: str, bold_open: bool) -> tuple[str, bo
     return "".join(out), bold_open
 
 
+def normalize_spaces(text: str) -> str:
+    """
+    Replace all non-standard whitespace characters with a regular space,
+    then collapse multiple spaces into a single space.
+
+    Parameters:
+        text (str): Input string possibly containing unusual space characters.
+
+    Returns:
+        str: Cleaned string with standard spaces only.
+    """
+    # Match various non-standard space characters
+    nonstandard_spaces = r"[\u00a0\u2000-\u200b\u202f\u205f\u2060]"
+
+    # Replace each with a regular space
+    text = re.sub(nonstandard_spaces, " ", text)
+
+    # Collapse multiple spaces and strip edges
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
 async def stream_llm_response(
     session,
     user_message: str,
@@ -94,7 +118,10 @@ async def stream_llm_response(
             if has_reserved_tags(chunk.text):
                 yield "DISALLOWED_TAGS"
                 return
-            converted, bold_open = convert_streaming_markdown_bold(chunk.text, bold_open)
+            # Normalize spaces and convert markdown bold to HTML
+            normalized_text = normalize_spaces(chunk.text)
+            # Convert markdown bold to HTML tags
+            converted, bold_open = convert_streaming_markdown_bold(normalized_text, bold_open)
             yield converted
 
         func_call = (
@@ -125,5 +152,8 @@ async def stream_llm_followup(
             if has_reserved_tags(chunk.text):
                 yield "DISALLOWED_TAGS"
                 return
-            converted, bold_open = convert_streaming_markdown_bold(chunk.text, bold_open)
+            # Normalize spaces and convert markdown bold to HTML
+            normalized_text = normalize_spaces(chunk.text)
+            # Convert markdown bold to HTML tags
+            converted, bold_open = convert_streaming_markdown_bold(normalized_text, bold_open)
             yield converted
