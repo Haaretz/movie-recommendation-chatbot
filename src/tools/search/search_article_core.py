@@ -40,21 +40,20 @@ class SearchArticle(QdrantClientManager, Embedding):
         documents = []
         for point in points:
             payload = point.payload
-            # if "publish_time" in payload:
-            #     payload["publish_time"] = payload["publish_time"].split("T")[0]
-            if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
-                payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
-            ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
-                if payload.get("distribution_platform") and "בתי קולנוע" in payload["distribution_platform"]:
-                    payload["distribution_platform"].remove("בתי קולנוע")
+            if payload is None:
+                if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
+                    payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
+                ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
+                    if payload.get("distribution_platform") and "בתי קולנוע" in payload["distribution_platform"]:
+                        payload["distribution_platform"].remove("בתי קולנוע")
 
-            if "Amazon Prime Video" in payload.get("distribution_platform", []):
-                # change from 'Amazon Prime Video' to 'Prime Video'
-                payload["distribution_platform"] = [
-                    platform.replace("Amazon Prime Video", "Amazon")
-                    for platform in payload.get("distribution_platform", [])
-                ]
-            documents.append(payload)
+                if "Amazon Prime Video" in payload.get("distribution_platform", []):
+                    # change from 'Amazon Prime Video' to 'Prime Video'
+                    payload["distribution_platform"] = [
+                        platform.replace("Amazon Prime Video", "Amazon")
+                        for platform in payload.get("distribution_platform", [])
+                    ]
+                documents.append(payload)
         return documents
 
     def _create_qdrant_filter(
@@ -253,6 +252,8 @@ if __name__ == "__main__":
     searcher = SearchArticle(
         qdrant_config=app_config.qdrant,
         embedding_config=app_config.embedding,
+        chat_config=app_config.chat,
+        excluded_ids=set(),
     )
 
     result = searcher.retrieve_relevant_documents(
@@ -261,5 +262,6 @@ if __name__ == "__main__":
         genres=[],
         review_type="movie",
         seen_ids=set(),
+        writer_filter=[],
     )
     print(result)
