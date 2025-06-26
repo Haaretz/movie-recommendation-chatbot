@@ -40,20 +40,20 @@ class SearchArticle(QdrantClientManager, Embedding):
         documents = []
         for point in points:
             payload = point.payload
-            if payload is not None:
-                if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
-                    payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
-                ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
-                    if payload.get("distribution_platform") and "בתי קולנוע" in payload["distribution_platform"]:
-                        payload["distribution_platform"].remove("בתי קולנוע")
+            if payload["movie"] and datetime.datetime.now() - datetime.datetime.strptime(
+                payload["publish_time"], "%Y-%m-%dT%H:%M:%SZ"
+            ) > datetime.timedelta(days=self.days_until_not_current_in_theaters):
+                if payload.get("distribution_platform") and "בתי קולנוע" in payload["distribution_platform"]:
+                    payload["distribution_platform"].remove("בתי קולנוע")
 
-                if "Amazon Prime Video" in payload.get("distribution_platform", []):
-                    # change from 'Amazon Prime Video' to 'Prime Video'
-                    payload["distribution_platform"] = [
-                        platform.replace("Amazon Prime Video", "Amazon")
-                        for platform in payload.get("distribution_platform", [])
-                    ]
-                documents.append(payload)
+            distribution = payload.get("distribution_platform")
+            if isinstance(distribution, list) and "Amazon Prime Video" in distribution:
+                # change from 'Amazon Prime Video' to 'Prime Video'
+                payload["distribution_platform"] = [
+                    platform.replace("Amazon Prime Video", "Amazon")
+                    for platform in payload.get("distribution_platform", [])
+                ]
+            documents.append(payload)
         return documents
 
     def _create_qdrant_filter(
