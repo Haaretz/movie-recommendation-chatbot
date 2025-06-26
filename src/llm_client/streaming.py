@@ -30,7 +30,7 @@ def strip_closing_question_tags(
     """
 
     async def wrapper(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
-        buffer = " "
+        buffer = ""
         async for chunk in stream:
             combined = buffer + chunk
 
@@ -42,7 +42,7 @@ def strip_closing_question_tags(
                 if strip_tags:
                     # Remove both tags in a single line
                     combined = combined.replace("<closing_question>", "").replace("</closing_question>", "")
-                buffer = " "
+                buffer = ""
 
                 def _clean(match):
                     return match.group(0).replace(r"\"", '"')  # Replace escaped quotes with actual quotes
