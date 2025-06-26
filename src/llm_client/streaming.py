@@ -45,7 +45,7 @@ def strip_closing_question_tags(
                 buffer = ""
 
                 def _clean(match):
-                    return match.group(0).replace(r"\"", '"')  # Replace escaped quotes with actual quotes
+                    return match.group(0).replace("\\", "")  # Replace escaped quotes with actual quotes
 
                 combined = BOLD_HTML_PATTERN.sub(_clean, combined)
                 yield combined
