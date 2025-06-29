@@ -32,7 +32,10 @@ def strip_closing_question_tags(
     Ensures tags are never split across chunks by buffering one chunk.
     """
 
+    closing_question_open = False  # Track if we have an unclosed <closing_question> tag
+
     async def wrapper(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
+        nonlocal closing_question_open
         buffer = ""
         async for chunk in stream:
             if chunk.startswith(" ") and buffer and not buffer.endswith(" "):
@@ -40,6 +43,12 @@ def strip_closing_question_tags(
                 chunk = chunk[1:]
 
             combined = buffer + chunk
+
+            # Track opening and closing tags
+            if "<closing_question>" in combined:
+                closing_question_open = True
+            if "</closing_question>" in combined:
+                closing_question_open = False
 
             # Always check for complete tags in the combined string
             has_full_tag = any(tag in combined for tag in ("<closing_question>", "</closing_question>"))
@@ -63,6 +72,9 @@ def strip_closing_question_tags(
 
         # After stream ends, flush remaining
         if buffer:
+            # Check if there's an unclosed opening tag using our tracking variable
+            if closing_question_open:
+                buffer += "</closing_question>"
             yield buffer
 
     return wrapper
