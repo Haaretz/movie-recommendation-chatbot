@@ -1,7 +1,7 @@
 import logging
 import os
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.jsonlogger import JsonFormatter
 
 APP_NAME = os.environ.get("APP_NAME", "MRC")
 
@@ -14,7 +14,7 @@ def get_logger(name: str):
 
     if not logger.hasHandlers():
         # Create a formatter to customize the log message format
-        formatter = jsonlogger("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = JsonFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(formatter)
