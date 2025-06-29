@@ -5,7 +5,9 @@ from typing import List, Optional
 import redis
 from google.genai.types import Content, FunctionCall, Part
 
-from logger import logger
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class RedisChatHistory:

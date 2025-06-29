@@ -10,6 +10,9 @@ from constant import (
     start_tag_info,
     start_tag_logs,
 )
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def has_reserved_tags(text: str) -> bool:
@@ -115,6 +118,7 @@ async def stream_llm_response(
 
     for chunk in session.stream(user_message):
         if chunk.text:
+            logger.debug(f"Received chunk: {repr(chunk.text)}")
             if has_reserved_tags(chunk.text):
                 yield "DISALLOWED_TAGS"
                 return
@@ -149,6 +153,7 @@ async def stream_llm_followup(
 
     for chunk in session.stream(parts):
         if chunk.text:
+            logger.debug(f"Received chunk: {repr(chunk.text)}")
             if has_reserved_tags(chunk.text):
                 yield "DISALLOWED_TAGS"
                 return

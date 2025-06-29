@@ -4,7 +4,9 @@ from google.genai.types import FunctionCall, Part
 
 from config.models import ChatContext
 from constant import NO_RESULT, TROLL
-from logger import logger
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class DatasetArticleHandler:

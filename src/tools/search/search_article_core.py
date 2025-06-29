@@ -4,9 +4,11 @@ from typing import Any, Dict, List, Set, Union
 from qdrant_client import models
 
 from config.models import ChatConfig, EmbeddingConfig, QdrantConfig
-from logger import logger
+from logger import get_logger
 from src.tools.search.utillity.embedding import Embedding
 from src.tools.search.utillity.qdrant import QdrantClientManager
+
+logger = get_logger(__name__)
 
 
 class SearchArticle(QdrantClientManager, Embedding):

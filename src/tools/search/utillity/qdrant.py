@@ -2,7 +2,9 @@ from qdrant_client import QdrantClient
 
 from config.loader import load_config
 from config.models import QdrantConfig
-from logger import logger
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class QdrantClientManager:

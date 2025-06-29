@@ -21,9 +21,11 @@ from pydantic import BaseModel
 
 from config.excluded_config import ExcludedIdLoader
 from config.loader import load_config
-from logger import logger
+from logger import get_logger
 from src.llm_client.client import LLMClient
 from src.redis_chat_history import RedisChatHistory
+
+logger = get_logger(__name__)
 
 
 # --------------------------------------------------------------------------- #
