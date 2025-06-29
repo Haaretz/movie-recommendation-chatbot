@@ -306,13 +306,13 @@ async def version():
     GET /version
     Returns the API version.
     """
-    return {"version": "0.3.0"}
+    return {"version": "1.0.0"}
 
 
 def main():
     port = int(os.environ.get("PORT", 8080))
     logger.info("Starting Uvicorn server on port %s", port)
-    logger.info("version: %s", "0.0.1")
+    logger.info("version: %s", "1.0.0")
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
