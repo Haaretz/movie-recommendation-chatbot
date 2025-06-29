@@ -35,6 +35,10 @@ def strip_closing_question_tags(
     async def wrapper(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
         buffer = ""
         async for chunk in stream:
+            if chunk.startswith(" ") and buffer and not buffer.endswith(" "):
+                buffer += " "
+                chunk = chunk[1:]
+
             combined = buffer + chunk
 
             # Always check for complete tags in the combined string
@@ -118,7 +122,7 @@ async def stream_llm_response(
 
     for chunk in session.stream(user_message):
         if chunk.text:
-            logger.debug(f"Received chunk: {repr(chunk.text)}")
+            # logger.debug(f"Received chunk: {repr(chunk.text)}")
             if has_reserved_tags(chunk.text):
                 yield "DISALLOWED_TAGS"
                 return
@@ -153,7 +157,7 @@ async def stream_llm_followup(
 
     for chunk in session.stream(parts):
         if chunk.text:
-            logger.debug(f"Received chunk: {repr(chunk.text)}")
+            # logger.debug(f"Received chunk: {repr(chunk.text)}")
             if has_reserved_tags(chunk.text):
                 yield "DISALLOWED_TAGS"
                 return
