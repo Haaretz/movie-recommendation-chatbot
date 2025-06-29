@@ -133,3 +133,4 @@ uvicorn==0.34.0
 vertexai==1.71.1
 wcwidth==0.2.13
 websockets==15.0.1
+python-json-logger==3.3.0
