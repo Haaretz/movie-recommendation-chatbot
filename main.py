@@ -192,7 +192,8 @@ async def handle_chat_stream(
     POST /chat
     Validate the request, enforce paying-user, then stream LLM responses in plain text.
     """
-    logger.error("error test")
+    # logger.error("error test")
+    # print(logger.handlers)
     token_data = get_sso_token_data(request)
     logger.debug("SSO token payload:", extra={"token_data": token_data})
     sso_id = token_data["userId"] if token_data else None
