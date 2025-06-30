@@ -95,7 +95,7 @@ class RedisChatHistory:
         Removes all consecutive 'model' messages from the end of the history,
         followed by the last 'user' message if present.
         """
-        # user_text: str | None = None
+        user_text: str = "הי"
 
         key = f"chat_history:{user_id}"
         while True:
