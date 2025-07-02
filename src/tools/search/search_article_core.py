@@ -173,13 +173,14 @@ class SearchArticle(QdrantClientManager, Embedding):
         self, search_result: List[Union[models.ScoredPoint, models.PointStruct]]
     ) -> List[Union[models.ScoredPoint, models.PointStruct]]:
         """
-        Order search results by publish_time in descending order.
+        Order search results by publish_time in descending order and remove duplicates by name.
+        For series with multiple entries (e.g. different seasons), keeps only the most recent one.
 
         Args:
             search_result: List of search results (either ScoredPoint or PointStruct).
 
         Returns:
-            Ordered list of search results.
+            Ordered list of search results without duplicates by name.
         """
         # Sort the results based on the publish_time field in descending order
         sorted_results = sorted(
@@ -187,7 +188,18 @@ class SearchArticle(QdrantClientManager, Embedding):
             key=lambda x: x.payload.get("publish_time", ""),
             reverse=True,
         )
-        return sorted_results[: self.SEARCH_LIMIT]
+
+        # Remove duplicates by name, keeping the most recent (first in sorted list) for same series in different seasons
+        seen_names = set()
+        unique_results = []
+
+        for result in sorted_results:
+            name = result.payload.get("name", "")
+            if name not in seen_names:
+                seen_names.add(name)
+                unique_results.append(result)
+
+        return unique_results[: self.SEARCH_LIMIT]
 
     def retrieve_relevant_documents(
         self,
