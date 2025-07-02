@@ -5,7 +5,13 @@ from pythonjsonlogger.jsonlogger import JsonFormatter
 
 APP_NAME = os.environ.get("APP_NAME", "MRC")
 
-logger_level = logging.DEBUG if os.environ.get("LOG_LEVEL", "debug") == "debug" else logging.INFO
+logger_level = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}.get(os.environ.get("LOG_LEVEL", "error").lower(), logging.ERROR)
 
 
 def get_logger(name: str):
